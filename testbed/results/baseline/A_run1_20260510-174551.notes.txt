@@ -1,0 +1,12 @@
+scenario: A
+run: 1
+mode: baseline
+started: 2026-05-10 17:45:51
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency:   Latency perception   (1=imperceptible, 5=unplayable): 2
+rating_quality:   Visual quality       (1=crisp,         5=many artifacts):   Visual quality       (1=crisp,         5=many artifacts): 2
+rating_stability:   Stability            (1=rock solid,    5=constant freezes): 2
+
+# Gameplay note
+Perceptivelmente notei a queda da qualidade - o jogo ficou injogavel e meus movimentos quase nunca eram registrados. Quando voltou, voltou de uma vez.

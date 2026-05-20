@@ -1,0 +1,2 @@
+timestamp_ms,session_id,bitrate_kbps,frame_index,missing_packets,total_data_packets,received_data_packets,total_parity_packets,received_parity_packets,fec_percentage,idr_request_count
+1779149168537,1,14988,1,5,22,21,5,1,20,1

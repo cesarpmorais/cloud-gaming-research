@@ -1,0 +1,12 @@
+scenario: A
+run: 2
+mode: baseline
+started: 2026-05-10 18:00:44
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 5
+rating_quality: 1
+rating_stability: 5
+
+# Gameplay note
+Stream crashou no meio

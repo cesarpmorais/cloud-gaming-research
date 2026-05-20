@@ -1,0 +1,12 @@
+scenario: test
+run: 1
+mode: baseline
+started: 2026-05-18 21:06:09
+duration_actual_s: 60
+duration_target_s: 240
+rating_latency: 1
+rating_quality: 1
+rating_stability: 1
+
+# Gameplay note
+(no note provided)

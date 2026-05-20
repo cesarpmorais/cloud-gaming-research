@@ -1,0 +1,5 @@
+phase	loss_pct	start_unix_ms	tc_dropped_at_start	tc_dropped_at_end
+clean0	999	1779150347428	0	0
+loss1	1	1779150377471		
+loss2	2	1779150408505		
+loss5	5	1779150439377		
