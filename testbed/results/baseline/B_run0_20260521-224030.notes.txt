@@ -1,0 +1,12 @@
+scenario: B
+run: 0
+mode: baseline
+started: 2026-05-21 22:40:30
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 4
+rating_quality: 1
+rating_stability: 4
+
+# Gameplay note
+Deu pra perceber uma "escadinha" de travamento. Voltou derrepente, mas logo depois deu mais um glitch

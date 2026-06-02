@@ -63,6 +63,7 @@ Frequent IDR requests = symptom of bad network conditions. Used as an input sign
 B-frames require a future frame to decode the current one — meaning you have to delay output until you receive the next frame. In game streaming, where every frame must be displayed immediately, this latency is unacceptable.
 
 ## Related
+- [[loss-recovery]] — FEC/RFI/IDR escalation ladder; IDR as the last-resort rung
 - [[architecture]] — stream.cpp handles IDR requests from Moonlight
 - [[idea-08-adaptive-streaming]] — IDR request rate as input signal
 

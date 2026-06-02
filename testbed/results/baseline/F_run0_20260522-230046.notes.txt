@@ -1,0 +1,12 @@
+scenario: F
+run: 0
+mode: baseline
+started: 2026-05-22 23:00:46
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 5
+rating_quality: 1
+rating_stability: 4
+
+# Gameplay note
+Injogavel do minuto 0 ao ~3]

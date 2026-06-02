@@ -1,9 +1,0 @@
-scenario: clean
-run: 1
-mode: baseline
-started: 2026-05-10 17:38:00
-duration_actual_s: 240
-duration_target_s: 240
-
-# Gameplay note
-Nenhum problema de streaming perceptível. Nível de latencia perceptivel 3

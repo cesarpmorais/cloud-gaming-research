@@ -39,19 +39,36 @@ NVENC → AMF → VAAPI → Software
 
 The user can override with `encoder =` in `sunshine.conf`.
 
+### "NVENC" is two different code paths
+
+This is the most important distinction in the file and the one easiest to miss. Sunshine has **two NVENC integrations**, selected by platform at compile time in `src/video.cpp` (the `#ifdef _WIN32` / `#elif !defined(__APPLE__)` branches starting around line 480):
+
+| Platform | Path | Session class | Codec name | Reconfigure API |
+|---|---|---|---|---|
+| **Windows** | Standalone NVENC SDK | `nvenc_encode_session_t` → `nvenc_base` → `nvenc_d3d11*` | n/a (calls NVENC directly) | `nvEncReconfigureEncoder()` — true seamless mid-session reconfigure |
+| **Linux** | FFmpeg avcodec wrapper around NVENC | `avcodec_encode_session_t` (same class VAAPI/software use) | `h264_nvenc` / `hevc_nvenc` / `av1_nvenc` | None at runtime — `bit_rate` is creation-time only |
+
+The standalone `nvenc_base` class is **never instantiated on Linux**. The class hierarchy under `src/nvenc/` (`nvenc_d3d11`, `nvenc_d3d11_native`, `nvenc_d3d11_on_cuda`) is Windows-only — see `src/nvenc/*.h` — and is the only consumer of the linked NVENC SDK headers.
+
+Consequence for cross-platform features:
+- Any code that wants a "runtime bitrate change" cannot just call `nvEncReconfigureEncoder()` — that entry point doesn't exist on Linux.
+- On Linux the implementation has to either (a) reinit the `AVCodecContext` mid-stream (works for every avcodec backend at once), or (b) add a new `nvenc_base` subclass that talks to NVENC through CUDA directly (mirror of Windows `nvenc_d3d11_on_cuda`). See [[idea-10-abr-comparison]] §"Step 5 mechanism" for the actual decision.
+
 ### Implication for idea #10 — runtime bitrate reconfiguration
 
-Each backend has its own API for accepting a new bitrate mid-session:
+Per backend, per platform:
 
-| Backend | Reconfigure support | Notes |
+| Backend / Platform | Reconfigure support | Notes |
 |---|---|---|
-| NVENC | Yes — dedicated `NvEncReconfigureEncoder()` call | Most reliable |
-| VAAPI | Driver-dependent | May or may not support mid-session changes |
-| AMF | Likely yes via `AMFComponent::SetProperty()` | Needs verification |
+| **NVENC (Windows)** | Yes — `nvEncReconfigureEncoder()` on `nvenc_base` | Seamless. Needs a `reconfigure_bitrate()` method added to `nvenc_base`; the encoder config is currently a stack local inside `create_encoder()` and would need to be promoted to a member field. |
+| **NVENC (Linux)** | No direct API — must go through `AVCodecContext` | FFmpeg's `h264_nvenc` does not honor `ctx->bit_rate` after `avcodec_open2()`. The only way to change bitrate is to tear down and rebuild the `AVCodecContext`. |
+| VAAPI | Driver-dependent in principle, but same Sunshine code path as Linux NVENC — goes through `avcodec_encode_session_t`. | A ctx-rebuild on bitrate change covers it. |
+| AMF (Windows) | Likely yes via `AMFComponent::SetProperty()` | Needs verification; same avcodec-wrapper question on Windows. |
 | Vulkan | Unknown — new backend, not yet investigated | Default rate control changed VBR → CBR (Sunshine#5032) |
-| Software (FFmpeg) | Yes — update `ctx->bit_rate` and call `avcodec_parameters_from_context` | Always available |
+| Software (FFmpeg) | Same as Linux NVENC — ctx-rebuild required | Always available |
+| VideoToolbox | Out of scope for idea #10 | macOS only |
 
-The adaptive controller will need either a unified abstraction layer or per-backend implementations.
+The cleanest abstraction is a `set_bitrate(kbps)` virtual on `encode_session_t`. On Linux it triggers a `AVCodecContext` rebuild (one mechanism for all avcodec backends). On Windows the `nvenc_encode_session_t` override calls into the standalone NVENC SDK. See [[idea-10-abr-comparison]] §"Step 5 mechanism" for the per-file plan.
 
 ## Related
 - [[bitrate-control]] — how bitrate flows through the pipeline and is passed to these backends

@@ -1,0 +1,12 @@
+scenario: C
+run: 0
+mode: baseline
+started: 2026-05-21 22:45:32
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 4
+rating_quality: 1
+rating_stability: 4
+
+# Gameplay note
+Claramente o jogo travava um pouco menos, mas a experiencia de gameplay ainda foi péssima

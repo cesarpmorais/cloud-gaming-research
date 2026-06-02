@@ -1,114 +1,154 @@
-# Network Scenarios — ABRAGame-shaped, Loss-based
+# Network Scenarios — ABRAGame-shaped, Bandwidth-limited
 
-Six scenarios adapted from Armendariz & Joskowicz (2025), Section 4, plus a clean baseline. We preserve the **temporal shapes** of the paper's scenarios (abrupt drop + recovery, gradual rise, intermittent fluctuations, etc.) but apply them to **packet loss percentage** instead of bandwidth caps.
+Six scenarios adapted from Armendariz & Joskowicz (2025), Section 4, plus a
+clean baseline. We preserve the **temporal shapes** of the paper's scenarios
+(abrupt drop + recovery, gradual decline, intermittent fluctuations, etc.) and
+apply them to **bandwidth caps** via `tc htb` — the impairment an adaptive
+bitrate controller is actually designed to handle.
 
-Each scenario lasts **240 s**.
+Each scenario lasts **240 s**. Baseline encoder target: **~19 Mbps** (18988 kbps
+— the value Sunshine negotiates from a 25 Mbps client bitrate slider).
 
-## Why loss instead of bandwidth (methodology divergence)
+## Why bandwidth (and not loss)
 
-ABRAGame's adaptive controller responds to **cumulative latency** as its primary signal. Bandwidth caps via `tc netem rate` naturally produce queueing delay, so their methodology — bandwidth-shaped scenarios — generates the signal their controller needs.
+An adaptive bitrate controller's job is to **match the send rate to available
+bandwidth**. That makes the impairment choice central:
 
-Our PR #1 captures `SS_FRAME_FEC_STATUS` events. These fire when:
-1. FEC recovery succeeds
-2. A frame is discarded for arriving late
-3. A frame is discarded for block mismatch
+- Under **uniform random loss**, lowering the bitrate barely helps — loss
+  percentage is independent of send rate. The controller has nothing to
+  optimize, and could even drop bitrate for no benefit.
+- Under **bandwidth constriction**, loss and latency become a *function of* the
+  bitrate: overshoot the cap and the bottleneck queue fills, inflating RTT and
+  send latency. Dropping the bitrate directly fixes it. **This is the regime
+  ABR exists for.**
 
-All three are **loss-triggered**, not throughput-triggered. Smoke testing confirmed empirically that `tc netem rate 5mbit` against a 15 Mbps stream produces visible gameplay degradation (heavy stutter, eventual Moonlight disconnect) but **zero FEC events** before the session collapses — the queue overflow pattern fragments frames in a way that does not trigger `reportFinalFrameFecStatus` on the client.
+An earlier version of this testbed used packet loss (see [[research-journey]],
+Stage 5). The reason was a measurement limitation: the only sensor at the time
+(`SS_FRAME_FEC_STATUS`) reacted to loss but not to bandwidth shaping — so the
+experiment was reshaped around what the sensor could detect. With `rtt_ms` and
+`frame_send_ms` now in the CSV, bandwidth constriction produces a real, graded
+signal (queueing delay inflates RTT). So the testbed returns to bandwidth-shaped
+scenarios. The TCC report should disclose this divergence transparently.
 
-So we pivoted: same temporal shapes from the paper, applied to `tc netem loss X%`. This deterministically generates FEC events that PR #2's controller can respond to. The TCC report should disclose this divergence transparently.
-
-## Loss profiles
+## Bandwidth profiles
 
 ```
-                Loss %
-                 7  ┤  E     ─┐                              ┌─
-                 5  ┤  A     ─────────┐        ┌───────────────
-                    ┤  F     ╲                 ┌──────────────
-                 3  ┤  D     ─╲╱─╲╱─╲╱─╲╱─╲╱─╲╱─╲╱─╲╱─╲╱─╲╱
-                    ┤  B     ─────────────┐ ┌─
-                 2  ┤                       │
-                 1  ┤  C     ──────╲
-                 0  ┤  clean ──────────────────────────────────
-                    └────────────────────────────────────────────
-                    0s        60s       120s      180s     240s
+                Cap (Mbps)
+            free ┤  clean ───────────────────────────────────
+              25 ┤
+              16 ┤  B      ───╲
+              14 ┤  C      ─────╲___
+              12 ┤  B          ╲___
+              10 ┤  C / D      ────────────  D toggles every 30 s
+               8 ┤  A / B  ─┐   ╲___────────┐
+               6 ┤  F      ─────────┐       │
+               4 ┤  E      ──────╲__________│____  (worst case)
+                 └──────────────────────────────────────────────
+                 0s        60s       120s      180s      240s
 ```
 
-(Schematic. Step ramps approximate the paper's "gradual" with discrete loss transitions.)
+(Schematic. The "good"/recovered state is **unshaped** — `htb` set to a rate far
+above the 20 Mbps target. Degraded states apply the caps below.)
 
 ## Definitions
 
-| ID | Description | Loss profile |
-|----|-------------|--------------|
-| **clean** | No impairment | 0% throughout |
-| **A** | Abrupt spike + rapid recovery | 0% → **5%** (80–160 s) → 0% |
-| **B** | Gradual rise + fast recovery | step ramp 0 → 1 → 2 → 3 → **5%** (60–160 s) → 0% |
-| **C** | Slow rise + fast recovery | step ramp 0 → 1 → 2 → **3%** (40–200 s) → 0% |
-| **D** | Intermittent fluctuations | toggle 0% / **3%** every 30 s |
-| **E** | Long heavy loss + abrupt recovery | 0% → **7%** (40–200 s) → 0% (worst case) |
-| **F** | High-loss start + late improvement | **5%** (0–160 s) → 0% |
+The negotiated target is ~19 Mbps, so every degraded cap sits **below** it — the
+controller always has work to do.
 
-Loss values were chosen to span ABRAGame's qualitative severity ranking:
-- "Mild congestion" (C, D) → 1–3%
-- "Moderate degradation" (A, B, F) → 5%
-- "Severe stress" (E) → 7%
+| ID | Description | Bandwidth profile |
+|----|-------------|-------------------|
+| **clean** | No impairment | unshaped throughout |
+| **A** | Abrupt drop + rapid recovery | unshaped → **8 Mbps** (80–160 s) → unshaped |
+| **B** | Gradual decline + fast recovery | step ramp 16 → 12 → **8 Mbps** (60–160 s) → unshaped |
+| **C** | Slow decline + fast recovery | step ramp 14 → **10 Mbps** (40–200 s) → unshaped |
+| **D** | Intermittent fluctuations | toggle unshaped / **10 Mbps** every 30 s |
+| **E** | Long heavy constriction + abrupt recovery | unshaped → **4 Mbps** (40–200 s) → unshaped (worst case) |
+| **F** | Low start + late improvement | **6 Mbps** (0–160 s) → unshaped |
 
-## tc commands per state
+Caps span ABRAGame's qualitative severity ranking:
+- "Mild congestion" (C, D) → ~10–14 Mbps
+- "Moderate degradation" (A, B, F) → ~6–8 Mbps
+- "Severe stress" (E) → 4 Mbps
+
+## tc commands
+
+Keep one `htb` class present for the whole run and drive every transition with
+`tc class change` — atomic, no traffic interruption.
 
 ```bash
-# Clean / good phase
+# Setup at the start of a run (unshaped: rate far above the target)
+sudo tc qdisc replace dev eno1 root handle 1: htb default 1
+sudo tc class replace dev eno1 parent 1: classid 1:1 htb rate 1000mbit
+
+# Optional: a fixed base latency ("distance" to the server)
+sudo tc qdisc replace dev eno1 parent 1:1 handle 10: netem delay 15ms
+
+# Enter a degraded state (example: 8 Mbps)
+sudo tc class change dev eno1 parent 1: classid 1:1 htb rate 8mbit
+
+# Return to the good state
+sudo tc class change dev eno1 parent 1: classid 1:1 htb rate 1000mbit
+
+# Tear down at the end of the run
 sudo tc qdisc del dev eno1 root
-
-# Light loss (e.g., D toggle low, C ramp early)
-sudo tc qdisc replace dev eno1 root netem loss 1%
-
-# Moderate loss (A, B, F bad phases)
-sudo tc qdisc replace dev eno1 root netem loss 5%
-
-# Heavy loss (E worst case)
-sudo tc qdisc replace dev eno1 root netem loss 7%
 ```
 
-`tc qdisc replace` is idempotent — works whether or not a qdisc is already present, and swaps atomically without traffic interruption.
+Shape **egress** of the server's interface — that is the video path; no `ifb`
+needed. Find the interface with `ip route get <client-ip>`. Verify shaping with
+`iperf3 -u` and inspect queue stats with `tc -s qdisc show dev eno1`.
 
-## Per-scenario expected behavior (fixed bitrate baseline)
+## Per-scenario expected behavior (fixed-bitrate baseline)
 
 | Scenario | Expected pattern |
 |----------|------------------|
-| clean | Zero or near-zero FEC events. Smooth gameplay. |
-| A | Quiet for the first 80 s, then burst of FEC events from 80–160 s, then quiet again. Visible stutter at the 80 s transition. |
-| B | Slow ramp-up of events from 60 s onwards, peaking 120–160 s, then sudden quiet. |
-| C | Slow buildup of events from 40 s onwards; sustained mid-rate events throughout the long ramp. |
-| D | Small bursts of events synced with the high-loss segments. Gameplay alternates between good and degraded. |
-| E | Heavy event load from 40–200 s. **Risk: Moonlight session may disconnect** under sustained 7% loss. Partial CSVs are acceptable and informative (the script auto-marks them with `_partial-Ns`). |
-| F | High event rate for the first 160 s; sudden quiet after recovery. |
+| clean | Stable RTT at baseline, low `frame_send_ms`, no IDR storm. High MOS. |
+| A | Calm for 80 s, then the cap drops to 8 Mbps: RTT inflates, `frame_send_ms` rises, the queue fills, IDR storm, visible stutter. Recovers at 160 s. |
+| B | RTT inflates gradually from 60 s as the cap steps down; peaks 120–160 s; abrupt recovery. |
+| C | Slow, sustained RTT inflation across the long 40–200 s ramp. |
+| D | RTT oscillates in sync with the 30 s toggles; gameplay alternates good/degraded. |
+| E | Heavy sustained RTT inflation 40–200 s at 4 Mbps « ~19 Mbps target. **Risk: the session may disconnect.** Partial CSVs are acceptable and informative. |
+| F | High congestion for the first 160 s; sudden relief after recovery. |
 
-If the baseline doesn't roughly match these patterns, something is wrong — wrong interface for tc, Moonlight not connected, Sunshine not exporting metrics, etc.
+If the baseline does not roughly match these patterns, something is wrong —
+wrong interface for `tc`, Moonlight not connected, or Sunshine not exporting.
 
 ## E disconnect risk — feature, not bug
 
-E is the most aggressive scenario (7% loss for 160 s). Under fixed bitrate, Moonlight's heartbeat may time out and the session may disconnect mid-run. **This is informative, not a defect:**
+E is the most aggressive scenario (4 Mbps for 160 s against a ~19 Mbps target).
+Under fixed bitrate the encoder keeps overshooting the cap, the queue overflows,
+and Moonlight's heartbeat may time out mid-run. **This is informative:**
 
-- Without an adaptive controller, severe sustained loss can kill the session
-- With an adaptive controller (PR #2), the bitrate should drop fast enough to keep the session alive
+- Without an adaptive controller, severe constriction can kill the session.
+- With the controller (PR #2), the bitrate should drop fast enough to keep the
+  session alive at reduced quality.
 
-The narrative for the TCC defense: "in scenario E, the baseline session disconnected at ~T seconds; with the adaptive controller, the session survived the full 240 s at reduced quality." If E does not disconnect, we still have comparison data; if it does, the contrast is stronger.
+Defense narrative: "in scenario E the baseline disconnected at ~T s; with the
+adaptive controller the session survived the full 240 s at reduced quality."
 
-## What about latency?
+## Latency: now the primary signal
 
-ABRAGame's scenarios D and F added +50 ms latency in the bad phases. We dropped that:
+Earlier this testbed dropped latency from the scenario design. That is reversed:
+**RTT is the controller's primary input signal.** Two latency components:
 
-- ABRAGame uses latency as their controller's input signal — adding it makes sense for them.
-- Our PR #1 does not capture latency. Adding `tc netem delay` would not affect the data we collect, only the subjective playability rating.
-- Keeping the testbed focused on what produces signal in our CSV simplifies analysis.
+- **Base latency** — added with a `netem delay` child of the `htb` class
+  (the optional command above). It models server "distance" and is constant.
+- **Queueing latency** — arises *naturally* when the send rate exceeds the
+  `htb` cap. This is the variable part the controller reads as RTT inflation,
+  and it is produced by the bandwidth caps themselves — no extra `tc` knob.
 
-If a reviewer asks about latency-only conditions, we can run an ad-hoc scenario with `tc netem delay 200ms` to record the subjective rating, but it's out of scope for the 21-run campaign.
+So the bandwidth profiles already generate the latency signal; the `netem
+delay` child only sets a realistic baseline above which inflation is measured.
 
-## What about packet jitter / corruption / reordering?
+## What we do not vary
 
-`tc netem` supports loss, delay, jitter, corruption, reordering, duplication. We use **only `loss`** in this campaign:
+`tc netem` also supports jitter, corruption, reordering, duplication, and
+random loss. This campaign uses **only bandwidth shaping** (plus an optional
+fixed base delay):
 
-- Keeps the campaign tractable (7 scenarios × 3 runs is already 2–3 hours)
-- Matches the failure mode our sensor detects
-- Avoids confounding effects (e.g., reordering can trigger our FEC pathway too, but with different statistics)
+- Keeps the campaign tractable (7 scenarios × 3 runs × 2 controllers).
+- Matches the impairment the controller is designed to handle.
+- Avoids confounding effects.
 
-Future work could expand the scenario matrix.
+Random loss specifically is out of scope as a primary impairment — see
+[[research-journey]], Stage 5. Expanding the scenario matrix (jitter, mixed
+loss + bandwidth) is future work.

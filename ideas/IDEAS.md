@@ -16,4 +16,4 @@ Running list of ideas for the TCC contribution to Sunshine.
 | 7 | [[idea-07-stats-export]] — Structured streaming stats export (CSV/JSON file + REST API) | 💡 raw |
 | 8 | [[idea-08-adaptive-streaming]] — Dynamic adaptation to packet loss / network conditions | 💡 raw |
 | 9 | [[idea-09-ml-abr]] — ML-based ABR controller (requires literature search first) | 💡 raw |
-| 10 | [[idea-10-abr-comparison]] — Unified TCC: Fixed vs rule-based vs RL adaptive bitrate comparison (extends ABRAGame, NVENC-only) | 🔍 exploring |
+| 10 | [[idea-10-abr-comparison]] — Fixed vs rule-based adaptive bitrate comparison (RTT-driven AIMD, extends ABRAGame, NVENC-only) | 🔍 exploring |

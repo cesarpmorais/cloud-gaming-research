@@ -1,0 +1,12 @@
+scenario: F
+run: 0
+mode: adaptive
+started: 2026-06-01 21:08:15
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 3
+rating_quality: 2
+rating_stability: 3
+
+# Gameplay note
+Um pouco travado throughout

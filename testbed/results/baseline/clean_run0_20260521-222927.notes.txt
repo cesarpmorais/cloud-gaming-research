@@ -1,0 +1,12 @@
+scenario: clean
+run: 0
+mode: baseline
+started: 2026-05-21 22:29:27
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 1
+rating_quality: 1
+rating_stability: 2
+
+# Gameplay note
+Alguns leves dips na estabilidade

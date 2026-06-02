@@ -1,0 +1,12 @@
+scenario: E
+run: 0
+mode: baseline
+started: 2026-05-22 22:55:36
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 5
+rating_quality: 1
+rating_stability: 5
+
+# Gameplay note
+Quando começou a travar, ficou poucos segundos travando maas jogável. Rapidamente travou de forma que nem o audio saia quase, injogavel

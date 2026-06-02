@@ -10,21 +10,21 @@
 #   IFACE=eno1 ./run_scenario.sh test 1
 #
 # Prerequisites — see testbed/README.md for full operational protocol. Brief:
-#   - Sunshine running with metrics_path = ~/code/ufmg/tcc/data/metrics
-#   - Moonlight bitrate set to 20 Mbps, 1080p60
+#   - Sunshine running with stats_export_path = ~/code/ufmg/tcc/data/metrics
+#   - Moonlight bitrate slider set to 25 Mbps, 1080p60 (negotiates ~19 Mbps)
 #   - Moonlight session DISCONNECTED before each run, then RECONNECTED right
-#     before pressing ENTER. Sunshine writes one CSV per session, so without
-#     a fresh session the script cannot identify the new file.
+#     before pressing ENTER, so each run streams a fresh single-run session.
 #   - Background apps closed (Discord, Steam, browser, OS updates, etc.)
 #
 # What it does:
 #   1. Validates inputs.
-#   2. Clears any stale tc qdisc on $IFACE.
+#   2. Clears any stale tc qdisc on $IFACE and installs the htb shaper.
 #   3. Waits for operator to confirm Moonlight session is fresh and stable.
-#   4. Runs the scenario function (applies tc changes over time).
+#   4. Runs the scenario function (applies tc bandwidth caps over time).
 #   5. Tears down tc.
 #   6. Prompts for gameplay-experience ratings and notes.
-#   7. Locates the new CSV, renames + moves it; saves the note alongside.
+#   7. Locates the session CSV, copies it (renamed) into results; saves the
+#      note alongside. The original CSV is kept in the staging dir.
 
 set -euo pipefail
 
@@ -74,13 +74,14 @@ esac
 : "${IFACE:?IFACE must be set, e.g. export IFACE=eno1}"
 METRICS_STAGING_DIR="${METRICS_STAGING_DIR:-$HOME/code/ufmg/tcc/data/metrics}"
 
+# The test scenario is a fixed ~60 s pipeline check, not a 240 s campaign run.
+if [ "$SCENARIO" = "test" ]; then
+    SCENARIO_DURATION="${SCENARIO_DURATION:-60}"
+    export SCENARIO_DURATION
+fi
+
 OUTPUT_DIR="$RESULTS_DIR/$MODE"
 mkdir -p "$OUTPUT_DIR"
-
-# Snapshot of CSVs already present so we can identify the new one later.
-mapfile -t PRE_RUN_CSVS < <(
-    find "$METRICS_STAGING_DIR" -maxdepth 1 -name '*.csv' 2>/dev/null | sort
-)
 
 # shellcheck source=lib/tc_helpers.sh
 source "$LIB_DIR/tc_helpers.sh"
@@ -99,8 +100,9 @@ echo " Interface: $IFACE   Duration: ${SCENARIO_DURATION:-240}s"
 echo " Results: $OUTPUT_DIR"
 echo "================================================================"
 
-echo "[1/6] Clearing any existing tc qdisc on $IFACE ..."
+echo "[1/6] Resetting tc on $IFACE (clear + htb shaper setup) ..."
 tc_clear
+tc_setup
 
 echo "[2/6] Sanity ping ..."
 if tc_ping_check; then
@@ -179,29 +181,23 @@ while IFS= read -r line; do
     NOTE_LINES+=("$line")
 done
 
-echo "[6/6] Locating new CSV ..."
+echo "[6/6] Locating the session CSV ..."
 
-mapfile -t POST_RUN_CSVS < <(
-    find "$METRICS_STAGING_DIR" -maxdepth 1 -name '*.csv' 2>/dev/null | sort
-)
-
+# Sunshine appends a row every 200 ms for the whole session, so this run's CSV
+# is the staging-dir file with the newest mtime — provided it was still being
+# written during the run (mtime at or after START_TS). Picking by mtime (not a
+# before/after diff) works even though the session, and thus its CSV, is
+# created before this script starts.
 NEW_CSV=""
+NEW_CSV_MTIME=0
 
-for f in "${POST_RUN_CSVS[@]}"; do
-    found=0
-
-    for g in "${PRE_RUN_CSVS[@]}"; do
-        if [ "$f" = "$g" ]; then
-            found=1
-            break
-        fi
-    done
-
-    if [ "$found" -eq 0 ]; then
-        NEW_CSV="$f"
-        break
+while IFS=' ' read -r mtime path; do
+    mtime=${mtime%.*}
+    if [ "$mtime" -ge "$START_TS" ] && [ "$mtime" -ge "$NEW_CSV_MTIME" ]; then
+        NEW_CSV="$path"
+        NEW_CSV_MTIME="$mtime"
     fi
-done
+done < <(find "$METRICS_STAGING_DIR" -maxdepth 1 -name '*.csv' -printf '%T@ %p\n' 2>/dev/null)
 
 # Build basename. Mark partial if duration was significantly under target.
 BASE="${SCENARIO}_run${RUN_NUMBER}_$(date -d "@$START_TS" +%Y%m%d-%H%M%S)"
@@ -237,24 +233,27 @@ NOTE_PATH="$OUTPUT_DIR/${BASE}.notes.txt"
 echo "      note saved: $NOTE_PATH"
 
 if [ -z "$NEW_CSV" ]; then
-    echo "      WARNING: no new CSV found in $METRICS_STAGING_DIR" >&2
-    echo "      Possible causes:" >&2
-    echo "        - clean network produced 0 events (expected for 'clean' scenario)" >&2
-    echo "        - Sunshine wasn't started with metrics_path pointing here" >&2
-    echo "        - Moonlight session was not freshly reconnected before this run" >&2
-    echo "        - the session disconnected before any FEC event fired" >&2
+    echo "      WARNING: no CSV written during this run in $METRICS_STAGING_DIR" >&2
+    echo "      A live session appends a CSV row every 200 ms, so nothing" >&2
+    echo "      written points to a setup problem:" >&2
+    echo "        - Sunshine wasn't started with stats_export_path pointing here" >&2
+    echo "        - the session never started (pairing / app-launch failure)" >&2
+    echo "        - the session died before the run began" >&2
     echo "      Note file is still saved for record-keeping." >&2
     exit 0
 fi
 
 CSV_DEST="$OUTPUT_DIR/${BASE}.csv"
 
-mv "$NEW_CSV" "$CSV_DEST"
+# Copy, not move: the original stays in the staging dir; results/ gets a
+# renamed copy sitting next to its .notes.txt.
+cp "$NEW_CSV" "$CSV_DEST"
 
 LINES=$(wc -l < "$CSV_DEST")
-EVENTS=$(( LINES - 1 ))
+ROWS=$(( LINES - 1 ))
 
-echo "      csv saved: $CSV_DEST"
-echo "      events: $EVENTS"
+echo "      csv copied:  $CSV_DEST"
+echo "      source kept: $NEW_CSV"
+echo "      rows (200ms ticks): $ROWS"
 
 echo "Done."

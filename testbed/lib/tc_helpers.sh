@@ -1,28 +1,34 @@
 #!/usr/bin/env bash
-# Helpers for managing tc netem qdiscs.
+# Helpers for managing tc htb bandwidth-shaping qdiscs.
 # Sourced by run_scenario.sh — not meant to run standalone.
 
 set -euo pipefail
 
 : "${IFACE:?IFACE must be set, e.g. export IFACE=eno1}"
 
-# Apply a packet-loss qdisc with the given loss percentage (integer or decimal).
-# Optional delay in ms can be passed as the second argument (defaults to 0 — i.e.
-# no extra delay added).
-#
-# Why loss instead of rate: FEC events (our metric source) are loss-triggered,
-# not throughput-triggered. `tc netem rate` causes queueing delay but does not
-# reliably produce loss until the qdisc queue overflows, which is unpredictable
-# and may not happen at all before Moonlight disconnects. `tc netem loss X%`
-# drops X% of packets directly, producing deterministic FEC event signal.
-tc_loss() {
-    local loss_pct="$1"
-    local delay_ms="${2:-0}"
-    if [ "$delay_ms" -gt 0 ]; then
-        sudo tc qdisc replace dev "$IFACE" root netem loss "${loss_pct}%" delay "${delay_ms}ms"
-    else
-        sudo tc qdisc replace dev "$IFACE" root netem loss "${loss_pct}%"
-    fi
+# Rate for the "unshaped" / good (recovered) state. Far above the ~19 Mbps
+# encoder target, so in this state the htb class never throttles the stream.
+TC_UNSHAPED_RATE="${TC_UNSHAPED_RATE:-1000mbit}"
+
+# Create the htb qdisc plus a single class, in the unshaped state.
+# Called once at the start of a run; every later transition is a `tc class
+# change` on this class — atomic, with no traffic interruption.
+tc_setup() {
+    sudo tc qdisc replace dev "$IFACE" root handle 1: htb default 1
+    sudo tc class replace dev "$IFACE" parent 1: classid 1:1 htb rate "$TC_UNSHAPED_RATE"
+}
+
+# Enter a degraded state: cap the class at the given rate, in Mbit/s.
+# Example: tc_cap 8  ->  8mbit. Queueing delay above this cap is the RTT
+# inflation the controller reads as its congestion signal.
+tc_cap() {
+    local mbit="$1"
+    sudo tc class change dev "$IFACE" parent 1: classid 1:1 htb rate "${mbit}mbit"
+}
+
+# Return to the unshaped (good) state.
+tc_uncap() {
+    sudo tc class change dev "$IFACE" parent 1: classid 1:1 htb rate "$TC_UNSHAPED_RATE"
 }
 
 # Remove any qdisc applied by us. Safe to call even if nothing is set.
@@ -30,9 +36,10 @@ tc_clear() {
     sudo tc qdisc del dev "$IFACE" root 2>/dev/null || true
 }
 
-# Show current qdisc for sanity checking.
+# Show current qdisc/class state for sanity checking.
 tc_show() {
-    tc qdisc show dev "$IFACE"
+    tc -s qdisc show dev "$IFACE"
+    tc -s class show dev "$IFACE"
 }
 
 # Quick connectivity sanity check — assumes a known reachable IP via this iface.

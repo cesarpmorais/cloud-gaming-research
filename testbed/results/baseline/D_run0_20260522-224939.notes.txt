@@ -1,0 +1,12 @@
+scenario: D
+run: 0
+mode: baseline
+started: 2026-05-22 22:49:39
+duration_actual_s: 241
+duration_target_s: 240
+rating_latency: 4
+rating_quality: 1
+rating_stability: 3
+
+# Gameplay note
+O mais ok até agora, travou bastante mas por menos tempo

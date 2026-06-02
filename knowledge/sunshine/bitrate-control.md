@@ -200,9 +200,31 @@ IDR request ─────────────────────► s
 
 Sunshine has no adaptive control. Three pieces are missing:
 
-1. **A loss signal that's actually captured.** The only loss feedback a modern Moonlight client sends is `SS_FRAME_FEC_STATUS` (0x5502), and Sunshine drops it. The first step is adding a `server->map(0x5502, ...)` handler in `controlBroadcastThread`. This signal is **event-driven** — sent only on loss/FEC-recovery, not periodically — so a clean network produces silence; any sliding window over it must be time-based and server-paced.
-2. **A bitrate decision function** (rule-based or RL) that consumes accumulated loss events.
-3. **A mechanism to reconfigure the running encoder mid-session** — does not currently exist and is the key technical challenge.
+1. ~~**A loss signal that's actually captured.**~~ ✅ Done in PR #1. `SS_FRAME_FEC_STATUS` is handled, and — more importantly — RTT (read from `peer->roundTripTime`) and stalls are exported on a 200 ms tick. See [[research-journey]] Stage 7.
+2. **A bitrate decision function** (rule-based AIMD per [[idea-10-abr-comparison]]) — *PR #2b, deferred*.
+3. **A mechanism to reconfigure the running encoder mid-session** — does not currently exist. This is the *PR #2a* deliverable; the per-platform shape is below.
+
+### The mechanism (PR #2a) — shape decided
+
+A `set_bitrate(kbps)` virtual on `encode_session_t`, plumbed via a new per-session mail channel:
+
+- **New global mail channel** `MAIL(bitrate_change)` (payload `int kbps`) in `src/globals.h`, mirroring `MAIL(idr)`.
+- **Per-session event** `bitrate_change_events` allocated at session alloc in `src/stream.cpp:2108`, alongside `idr_events`.
+- **Encoder loops** (`videoBroadcastThread` async at `src/video.cpp:2086`; sync at `:2359`) drain the event before each frame and call `session->set_bitrate(kbps)`.
+- **`encode_session_t::set_bitrate(int kbps)`** declared in `src/video.h:210`, implemented per-backend:
+  - `avcodec_encode_session_t` (Linux NVENC, VAAPI, software) — stores `pending_bitrate_kbps`; the next `encode_avcodec()` invocation tears down `AVCodecContext` and rebuilds it via an extracted helper `init_avcodec_ctx(...)`, then forces IDR. Cost: one encoder reinit (~100–200 ms encoder downtime, masked by the IDR).
+  - `nvenc_encode_session_t` (Windows standalone NVENC) — calls a new `nvenc_base::reconfigure_bitrate(kbps)` that builds `NV_ENC_RECONFIGURE_PARAMS` and calls `nvEncReconfigureEncoder()`. *Deferred; stubbed `false` in PR #2a.*
+- **`csv_stats_logger::set_target_kbps(kbps)`** added to `src/stat_trackers.{h,cpp}` so the `target_kbps` CSV column reflects the live target — essential for plotting the controller's trajectory in PR #2b.
+
+The Linux/Windows divergence (and why the standalone `nvEncReconfigureEncoder()` is unreachable on Linux) is documented in [[encoders]] §"NVENC is two different code paths".
+
+### Validating the mechanism before the controller
+
+The test driver for PR #2a is a hardcoded deterministic sweep behind a `bitrate_sweep_test` config flag (off by default). The driver raises `bitrate_change_events` on a known schedule, so the testbed can correlate the CSV against the schedule. Three validation runs:
+
+1. Clean network, sweep 19 → 1 → 19 Mbps over 240 s — confirm `target_kbps` and `bitrate_kbps` columns track the schedule, IDR per transition, no disconnect.
+2. Same sweep under `tc htb` cap at 4 Mbps (scenario E shape) — verify the session survives when the manual sweep drops below the cap in time. This is the defense-narrative test before the AIMD policy exists.
+3. Measure the `stalls` / `stall_ms` impact of each transition — quantifies the cost of the avcodec reinit. If intolerable, the lever is to revisit the standalone-NVENC-on-Linux approach in [[encoders]].
 
 ## Related
 - [[architecture]] — overall pipeline; `stream.cpp` and `video.cpp` roles

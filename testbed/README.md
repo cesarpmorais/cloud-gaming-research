@@ -1,26 +1,26 @@
 # Sunshine ABRAGame Testbed
 
-Automation for running the 6 ABRAGame network scenarios + a clean baseline against a Sunshine ↔ Moonlight session, scaled to a realistic 20 Mbps cloud-gaming target.
+Automation for running the 6 ABRAGame network scenarios + a clean baseline against a Sunshine ↔ Moonlight session. Impairment is bandwidth shaping (`tc htb`); the encoder target is ~19 Mbps (negotiated from a 25 Mbps client slider).
 
 ## What's here
 
 | Path | Purpose |
 |------|---------|
-| `scenarios.md` | Definition of the 7 scenarios (clean, A–F) with bandwidth/latency profiles |
+| `scenarios.md` | Definition of the 7 scenarios (clean, A–F) with bandwidth profiles |
 | `run_scenario.sh` | Main entry — runs one scenario, one repetition |
-| `lib/tc_helpers.sh` | `tc netem` setup/teardown wrappers |
-| `lib/scenarios.sh` | Time-scheduled `tc` changes per scenario |
+| `lib/tc_helpers.sh` | `tc htb` shaper setup/teardown wrappers |
+| `lib/scenarios.sh` | Time-scheduled `tc` bandwidth caps per scenario |
 | `results/baseline/` | CSVs + `.notes.txt` from fixed-bitrate baseline runs |
 | `results/adaptive/` | (Future) results from adaptive bitrate runs (PR #2) |
 
 ## Prerequisites
 
-1. **Sunshine binary built** with our PR #1 changes (`metrics_path` config option supported).
+1. **Sunshine binary built** with our PR #1 changes (`stats_export_path` config option supported).
 2. **Sunshine config** (`~/.config/sunshine/sunshine.conf`):
    ```
-   metrics_path = /home/cesarpmorais/code/ufmg/tcc/data/metrics
+   stats_export_path = /home/cesarpmorais/code/ufmg/tcc/data/metrics
    ```
-3. **Moonlight Android** paired and configured for **20 Mbps at 1080p60**.
+3. **Moonlight Android** paired with the bitrate slider at **25 Mbps, 1080p60** (Sunshine negotiates a ~19 Mbps / 18988 kbps on-the-wire target from it).
 4. **`iproute-tc`** installed (`sudo dnf install iproute-tc`).
 5. **Sudo for `tc`** — `tc qdisc` requires root.
 6. **Background apps closed** on the host: Discord, Steam, browser, OS updates, etc.
@@ -34,11 +34,11 @@ export IFACE=eno1   # confirm with: ip route show default
 
 ## **Operational protocol — read carefully**
 
-Sunshine writes one CSV per session (lazy on first FEC event). The script identifies the new CSV by diffing the staging directory before/after the run. **For this to work, every run must be a fresh session.**
+Sunshine writes one CSV per session, created the moment the session starts (header first, then one row per 200 ms tick). The script identifies this run's CSV as the staging-dir file with the newest modification time — a live session is still being appended to, so it always wins. The original is left in place and a renamed copy is placed in `results/`. **Still, run every scenario on a fresh session** (disconnect/reconnect Moonlight between runs) so each CSV holds exactly one run.
 
 ### Per-session setup (start of bench day)
 
-1. Confirm Moonlight Android is on **20 Mbps, 1080p60**.
+1. Confirm the Moonlight Android bitrate slider is on **25 Mbps, 1080p60**.
 2. Close all non-essential apps on the host.
 3. Start Sunshine: `./Sunshine/build/sunshine` (leave running for the whole bench session).
 4. Open Moonlight on the Android device.
@@ -106,24 +106,25 @@ $ IFACE=eno1 ./testbed/run_scenario.sh A 1
 > Clean again after 160s, didn't notice anything else.
 >
 
-[6/6] Locating new CSV ...
-      note saved: /.../A_run1_20260510-180230.notes.txt
-      csv saved:  /.../A_run1_20260510-180230.csv
-      events: 87
+[6/6] Locating the session CSV ...
+      note saved:   /.../results/baseline/A_run1_20260510-180230.notes.txt
+      csv copied:   /.../results/baseline/A_run1_20260510-180230.csv
+      source kept:  /.../data/metrics/sunshine-stats-20260510-175958.csv
+      rows (200ms ticks): 1187
 Done.
 ```
 
 ## Sanity checking after a run
 
 ```bash
-# Quick stats
-awk -F, 'NR>1 {n++; m+=$5; t+=$6; idr+=$11} END {
-  printf "events=%d  missing_avg=%.2f  total_data_avg=%.2f  idr_total=%d\n",
-         n, m/n, t/n, idr
+# Quick stats (column indices match the 18-column Tier 1 CSV)
+awk -F, 'NR>1 {n++; rtt+=$11; bps+=$4; st+=$9; idr+=$17} END {
+  printf "rows=%d  rtt_avg=%.1fms  bitrate_avg=%.0fkbps  stalls=%d  idr_requests=%d\n",
+         n, rtt/n, bps/n, st, idr
 }' results/baseline/A_run1_*.csv
 
-# Verify tc was actually applied (run during a "bad phase")
-tc qdisc show dev eno1
+# Verify the cap was actually applied (run during a "bad phase")
+tc -s class show dev eno1   # the htb class rate should match the scenario's cap
 ```
 
 Expected ranges per scenario are in `scenarios.md` ("Per-scenario expected behavior").
@@ -132,10 +133,11 @@ Expected ranges per scenario are in `scenarios.md` ("Per-scenario expected behav
 
 | Symptom | Cause / Fix |
 |---------|-------------|
-| Script says "no new CSV found" after run | (1) `clean` produced 0 events — expected. (2) Forgot to disconnect/reconnect Moonlight — the run's events went into the previous session's file. (3) Sunshine `metrics_path` misconfigured. |
+| Script says "no CSV written during this run" | A live session appends a row every 200 ms, so nothing written is a setup fault: (1) Sunshine `stats_export_path` misconfigured, or Sunshine not running; (2) the session never started (pairing / app-launch failure); (3) the session died before the run began. |
+| Copied CSV has far more rows than expected (~1200 for a 240 s run) | You forgot to disconnect/reconnect Moonlight, so this run streamed into the previous session's still-open CSV. The copy now spans multiple runs — slice by `elapsed_ms`, or just re-run on a fresh session. |
 | `tc: Operation not permitted` | Need sudo. The script invokes `sudo tc` internally; you'll be prompted. |
 | `RTNETLINK answers: File exists` | Stale tc qdisc from a prior crashed run. Run `sudo tc qdisc del dev $IFACE root` and retry. The script's cleanup trap should prevent this. |
-| All scenarios look identical | tc isn't actually being applied. Verify with `tc qdisc show dev eno1` during a run; should show netem with the expected rate/delay. Check that `IFACE` matches the wired interface, and that Wi-Fi is off (or that the stream actually routes through the wired iface). |
+| All scenarios look identical | The cap isn't being applied. Verify with `tc -s class show dev eno1` during a run; the htb class rate should match the scenario's current cap. Check that `IFACE` matches the wired interface, and that Wi-Fi is off (or that the stream actually routes through the wired iface). |
 | Smooth gameplay during scenario E | Either (a) you got lucky and Moonlight survived the 4 Mbps phase, or (b) tc isn't being applied. Check #2 above. |
 | `clean` looks unstable | Probably not the testbed — check Sunshine encoder choice, GPU pinning, network routes. Don't run the campaign until clean is actually clean. |
 

@@ -1,0 +1,12 @@
+scenario: A
+run: 0
+mode: adaptive
+started: 2026-06-01 20:38:50
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 3
+rating_quality: 1
+rating_stability: 3
+
+# Gameplay note
+Um grande freeze, que foi suavizado e com alguns travamentos. Ficou bem jogavel depois de ~10s sem jogo
