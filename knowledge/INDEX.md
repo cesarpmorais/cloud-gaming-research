@@ -31,6 +31,8 @@ Goal: Get a PR merged as part of a Brazilian undergrad thesis (TCC).
 - [[contributing-guidelines]] — PR rules, semantic commit format, clang-format, gtest, Codecov, localization
 - [[sunshine-ci-pipeline]] — what runs on a PR, SonarCloud thresholds (lambda 20 lines, params 7), gh-pages flake, first-PR maintainer approval
 - [[stats-export-findings]] — PR #1 dev notes: dead IDX_LOSS_STATS, FEC-status reality, and the empirical finding that IDR-request rate is the working loss signal
+- [[reactive-blind-spot]] — architectural property of reactive ABR controllers: ~2–3 s detection floor that produces the initial RTT spike; what GCC, ABRAGame, and C³G each do about it
+- [[results-beta-0.7]] — first-round campaign results (baseline vs adaptive at β=0.7): 7×–33× p95 RTT cuts on 5/6 degraded scenarios, scenario E as failure mode, channel-use gap vs C³G, plus ready-to-paste TCC paragraphs
 - [[research-journey]] — chronological evolution of the signal & methodology understanding (Stages 0–7); TCC narrative source material
 
 ## Papers
