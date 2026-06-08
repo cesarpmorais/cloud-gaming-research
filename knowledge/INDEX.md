@@ -33,6 +33,9 @@ Goal: Get a PR merged as part of a Brazilian undergrad thesis (TCC).
 - [[stats-export-findings]] — PR #1 dev notes: dead IDX_LOSS_STATS, FEC-status reality, and the empirical finding that IDR-request rate is the working loss signal
 - [[reactive-blind-spot]] — architectural property of reactive ABR controllers: ~2–3 s detection floor that produces the initial RTT spike; what GCC, ABRAGame, and C³G each do about it
 - [[results-beta-0.7]] — first-round campaign results (baseline vs adaptive at β=0.7): 7×–33× p95 RTT cuts on 5/6 degraded scenarios, scenario E as failure mode, channel-use gap vs C³G, plus ready-to-paste TCC paragraphs
+- [[improvement-roadmap]] — five independent algorithmic upgrades to narrow the C³G gap: computed-drain step (❌ discarded — see [[idea-1-postmortem]]), predictive trigger, sub-second `frame_send_ms` path, per-session safe-target memory, and CUBIC-shaped increase curve + fast convergence ([[cubic]])
+- [[idea-1-postmortem]] — why the computed-drain step (live-EMA + pre-congestion snapshot) under-performed plain β=0.7 on Scenario A; structural conclusion that server-side encoder-output rate is not a usable proxy for channel capacity
+- [[results-idea-5]] — CUBIC port (cubic recovery curve + fast convergence) implementation log and results across three runs: A K=15 s, A K=5 s, E K=15 s. Peak RTT on E cut 40 % vs baseline (3808 → 2305 ms). Documents the t-origin design subtlety pending fix in Idea 5b
 - [[research-journey]] — chronological evolution of the signal & methodology understanding (Stages 0–7); TCC narrative source material
 
 ## Papers
@@ -42,6 +45,7 @@ Goal: Get a PR merged as part of a Brazilian undergrad thesis (TCC).
 - [[hong2015]] — Enabling Adaptive Cloud Gaming in an Open-Source Cloud Gaming Platform (Hong et al., IEEE TCSVT 2015); the *implementation* prior art — GA's runtime codec reconfiguration, the 2 Mbps MOS saturation finding, and crowdsourced MOS methodology
 - [[baldovino2022]] — An Overview of the Networking Issues of Cloud Gaming (Baldovino, JINITA 2022); 33-paper literature review; useful as a *citation hub* for the 70 ms RTT / 1% loss / 100–150 ms response thresholds and as a pointer to Alos et al. 2019 (RTT-based congestion control)
 - [[alos2019]] — **Congestion Control for Cloud Gaming Over UDP Based on Round-Trip Video Latency (C³G)** (Alós et al., IEEE Access 2019); the closest prior work to our TCC — server-side, RTT-based ABR on the PlayGiga CG platform, BBR-inspired, with a reactive drain + proactive state-dictionary policy
+- [[cubic]] — **CUBIC: A New TCP-Friendly High-Speed TCP Variant** (Ha, Rhee, Xu, ACM SIGOPS OSR 2008); default Linux TCP since 2006; the peer-reviewed time-based cubic increase curve and fast-convergence mechanism we are porting to replace our hand-rolled two-phase recovery and Idea 5 (`last_known_good` decay)
 
 ## Tasks
 - [[fix-10bit-portal/plan]] — 🟡 partially solved upstream after May 2026 refactor; needs re-evaluation on current codebase
