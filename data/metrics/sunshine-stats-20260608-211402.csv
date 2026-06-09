@@ -1,0 +1,2 @@
+elapsed_ms,frames,encoded_kb,bitrate_kbps,target_kbps,packets_sent,avg_encode_ms,avg_send_ms,stalls,stall_ms,rtt_ms,rtt_var_ms,idr_frames,fec_events,missing_packets,unrecoverable_frames,idr_requests,rfi_requests,abr_state
+10002,0,0.00,0.00,18988,0,0.00,0.00,0,0.00,0,0,0,0,0,0,1,0,-1

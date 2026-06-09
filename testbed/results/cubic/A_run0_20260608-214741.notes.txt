@@ -1,0 +1,12 @@
+scenario: A
+run: 0
+mode: cubic
+started: 2026-06-08 21:47:41
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 3
+rating_quality: 2
+rating_stability: 3
+
+# Gameplay note
+Bem laggy all around, mas deu pra jogar!

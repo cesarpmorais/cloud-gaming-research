@@ -1,0 +1,12 @@
+scenario: C
+run: 0
+mode: cubic
+started: 2026-06-08 22:01:59
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 2
+rating_quality: 1
+rating_stability: 3
+
+# Gameplay note
+Alguns dips mas em geral não teve grandes travamentos - a experiencia no cubic está sendo bem menos smooth em geral

@@ -1,0 +1,12 @@
+scenario: D
+run: 0
+mode: cubic
+started: 2026-06-08 22:07:11
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 3
+rating_quality: 1
+rating_stability: 3
+
+# Gameplay note
+Um grande travamento no meio - em geral experiencia não tao boa

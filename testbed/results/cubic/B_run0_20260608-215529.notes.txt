@@ -1,0 +1,12 @@
+scenario: B
+run: 0
+mode: cubic
+started: 2026-06-08 21:55:29
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 3
+rating_quality: 2
+rating_stability: 2
+
+# Gameplay note
+O caso mais interessante até agora: até mais ou menos a metade, estava bem travado - estava numa secao dificil de plataforma e estava dificil em termos de jogabilidade. Em algum ponto claramente a qualidade dimine dessa forma ficou bem mais jogavel!!

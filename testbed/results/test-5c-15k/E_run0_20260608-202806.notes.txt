@@ -1,0 +1,12 @@
+scenario: E
+run: 0
+mode: test-5c-15k
+started: 2026-06-08 20:28:06
+duration_actual_s: 240
+duration_target_s: 240
+rating_latency: 1
+rating_quality: 1
+rating_stability: 1
+
+# Gameplay note
+1
