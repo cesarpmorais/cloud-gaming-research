@@ -1,0 +1,45 @@
+\section{Introdução}\label{sec:introducao}
+
+% ─── Beat 1: O problema. ─────────────────────────────────────────────
+% Jogos em nuvem: cliente fino, servidor caro, rede no meio.
+% Requisitos duros: RTT < 100 ms, perda < 1\%.
+% A rede doméstica não os respeita o tempo todo.
+
+% ─── Beat 2: Por que controle adaptativo de taxa de bits importa. ────
+% Sem ABR: estouro de buffer (bufferbloat), travamentos, recuperação
+% via I-frame (IDR) — punição visual severa.
+% O servidor é o lugar natural para o controle: ele controla o codec.
+
+% ─── Beat 3: O Sunshine e o problema das plataformas comerciais. ────
+% Plataformas comerciais (GeForce NOW, Xbox Cloud Gaming, PlayStation
+% Plus) resolvem o problema às custas de lock-in: assinatura mensal,
+% catálogo restrito, hardware proprietário no data center, sem controle
+% do usuário sobre qualidade/latência. Alternativa open-source: o
+% \emph{Sunshine}, servidor de streaming compatível com o protocolo
+% NVIDIA GameStream (cliente Moonlight), permite que o usuário rode o
+% próprio jogo na própria máquina e estreame para qualquer dispositivo
+% leve em sua rede ou via internet. Hoje, opera com taxa de bits fixa
+% negociada no início da sessão — sem reação a degradação de rede em
+% curso, deixando a experiência refém da estabilidade do link.
+
+% ─── Beat 4: A contribuição. ────────────────────────────────────────
+% Implementamos um controlador AIMD com primitivas do CUBIC
+% (Ha, Rhee, Xu, 2008) — curva cúbica de recuperação e convergência
+% rápida — apenas com sinais observáveis no servidor (RTT, sem
+% cooperação do cliente). Avaliamos contra (a) base sem ABR e
+% (b) AIMD de duas fases sob seis cenários de degradação reproduzíveis.
+
+% ─── Beat 5: Resultado principal. ───────────────────────────────────
+% Redução de até 43\% no pico de RTT e até 60\% no tempo total de
+% travamento, ao custo de um leve aumento na latência mediana — uma
+% troca alinhada às prioridades de jogabilidade discutidas em
+% \cite{alos2019,abragame}.
+
+% ─── Beat 6: Estrutura do trabalho. ─────────────────────────────────
+\subsection{Estrutura do Trabalho}
+% Cap. \ref{sec:referencial} apresenta o referencial teórico e os
+% trabalhos correlatos. Cap. \ref{sec:contribuicao} descreve o
+% controlador proposto. Cap. \ref{sec:metodologia} detalha o testbed
+% e o protocolo experimental. Cap. \ref{sec:resultados} apresenta os
+% resultados. Cap. \ref{sec:conclusao} conclui e aponta trabalhos
+% futuros.

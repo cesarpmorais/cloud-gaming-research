@@ -1,0 +1,73 @@
+% TCC — Controle Adaptativo de Taxa de Bits para Jogos em Nuvem (Sunshine)
+% Autor: César Morais — UFMG, 2026
+% Compilação: pdflatex main && bibtex main && pdflatex main && pdflatex main
+
+\documentclass[conference]{IEEEtran}
+
+% ─── Encoding / Idioma ──────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+
+% ─── Matemática / Tabelas / Figuras ─────────────────────────────────
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{siunitx}
+
+% ─── Código / Listings ──────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  frame=single,
+  language=C++
+}
+
+% ─── Hyperref por último ────────────────────────────────────────────
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
+
+% ─── Convenções ─────────────────────────────────────────────────────
+\newcommand{\rtt}{RTT}
+\newcommand{\kbps}{kbps}
+
+\begin{document}
+
+\title{Controle Adaptativo de Taxa de Bits para Jogos em Nuvem:\\
+Uma Contribuição ao Servidor de Streaming Sunshine}
+
+\author{\IEEEauthorblockN{César Pereira Morais}
+\IEEEauthorblockA{Departamento de Ciência da Computação\\
+Universidade Federal de Minas Gerais (UFMG)\\
+Belo Horizonte, Brasil\\
+cesarcreeper@gmail.com}}
+
+\maketitle
+
+\begin{abstract}
+% TODO: 150–200 palavras. Problema, abordagem, resultado principal (queda
+% de até 43\% no pico de RTT vs. AIMD de base), contribuição (código
+% aberto incorporado ao Sunshine).
+\end{abstract}
+
+\begin{IEEEkeywords}
+jogos em nuvem, controle de congestionamento, taxa de bits adaptativa,
+AIMD, CUBIC, Sunshine, streaming de jogos.
+\end{IEEEkeywords}
+
+\input{01-introducao}
+\input{02-referencial}
+\input{03-contribuicao}
+\input{04-metodologia}
+\input{05-resultados}
+\input{06-conclusao}
+
+\bibliographystyle{IEEEtran}
+\bibliography{bibliography}
+
+\end{document}

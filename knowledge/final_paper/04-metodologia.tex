@@ -1,0 +1,227 @@
+\section{Metodologia}\label{sec:metodologia}
+
+Este capítulo descreve o ambiente experimental, o procedimento
+de avaliação e os instrumentos utilizados para comparar o
+controlador AIMD CUBIC com duas referências de base. A
+organização segue seis eixos: o testbed físico e a carga de
+trabalho adotada; os cenários de degradação de rede; os
+controladores comparados; a instrumentação e as métricas
+analisadas; o uso de inteligência artificial como ferramenta de
+pesquisa; e o protocolo de execução das sessões experimentais.
+
+\subsection{Testbed e Carga de Trabalho}
+
+O servidor de \emph{streaming} executa o Sunshine sobre o
+hardware descrito na Tabela~\ref{tab:testbed}. A escolha do
+ambiente buscou aproximar-se de uma instalação típica de jogos
+em nuvem \emph{self-hosted}: GPU dedicada da geração atual,
+codificador NVENC, sistema operacional Linux, e conexão
+cabeada ao roteador doméstico.
+
+\begin{table}[!t]
+  \caption{Especificações do testbed experimental.}
+  \label{tab:testbed}
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Componente} & \textbf{Especificação} \\
+    \midrule
+    CPU (servidor) & AMD Ryzen 7 7700 (8 núcleos, 16 \emph{threads}) \\
+    RAM (servidor) & 32~GB \\
+    GPU (servidor) & NVIDIA GeForce RTX 4070 SUPER \\
+    Codificador & NVENC \\
+    Sistema operacional & Fedora Linux 43 \\
+    \emph{Kernel} & Linux 6.19 \\
+    Interface de rede (servidor) & Ethernet 1~Gbps \\
+    Cliente & Smartphone Android, \emph{Moonlight} \\
+    Conexão do cliente & Wi-Fi, mesma rede local \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+A degradação de rede foi emulada no servidor via \texttt{tc}
+com disciplina HTB, aplicada à interface de saída \texttt{eno1}.
+Essa abordagem permite limitar a capacidade do enlace de forma
+determinística e reproduzível, sem introduzir atrasos
+artificiais que poderiam confundir o sinal de RTT utilizado
+pelo controlador. Os \emph{scripts} de \emph{shaping} adotados estão disponíveis
+no repositório do projeto.
+
+A carga de trabalho utilizada em todas as sessões foi o jogo
+\emph{Celeste}, escolhido por três motivos complementares. O
+primeiro é o perfil de \emph{rendering} leve: o estilo
+visual 2D mantém a taxa de bits demandada pelo codificador em
+patamares relativamente estáveis, evitando que a variação do
+canal seja confundida com variação do conteúdo. O segundo é a
+sensibilidade do \emph{gameplay} à latência: a mecânica
+baseia-se em saltos de precisão e janelas curtas de reação,
+condição em que travamentos e atrasos são imediatamente
+perceptíveis ao operador. O terceiro é a previsibilidade do
+comportamento entre sessões, característica desejável para que
+diferenças observadas entre controladores possam ser atribuídas
+ao próprio controlador, e não ao conteúdo exibido. A escolha de
+um único título constitui uma limitação reconhecida na
+discussão dos resultados (Capítulo~\ref{sec:resultados}).
+
+\subsection{Cenários de Avaliação}
+
+Foram definidos seis cenários de degradação de rede,
+sintetizados na Tabela~\ref{tab:scenarios}, escolhidos para
+cobrir as principais formas em que um canal doméstico pode
+degradar ao longo de uma sessão de jogo. Os cenários variam em
+três dimensões complementares: a forma da degradação (queda
+abrupta, em degraus, em janelas alternadas, ou contínua); a
+severidade da constrição (de \SI{16}{\mega\bit\per\second}
+até \SI{4}{\mega\bit\per\second}); e a duração total do
+período sob shaping (de janelas curtas de \SI{30}{\second} a
+constrições contínuas de \SI{160}{\second}). Fora das janelas
+indicadas, o enlace opera sem restrição imposta pelo
+\texttt{tc}, ou seja, na capacidade nativa de \SI{1}{\giga\bit\per\second}.
+
+\begin{table}[!t]
+  \caption{Cenários de degradação de rede utilizados na campanha
+  experimental. Fora das janelas indicadas, o canal opera sem
+  restrição.}
+  \label{tab:scenarios}
+  \centering
+  \begin{tabular}{cll}
+    \toprule
+    \textbf{Cenário} & \textbf{Capacidade} & \textbf{Janela de shaping} \\
+    \midrule
+    A & 8~Mbps & 80--160~s \\
+    B & 16 / 12 / 8~Mbps & 60--90 / 90--120 / 120--160~s \\
+    C & 14 / 10~Mbps & 40--120 / 120--200~s \\
+    D & 10~Mbps & 30--60 / 90--120 / 150--180 / 210--240~s \\
+    E & 4~Mbps & 40--200~s \\
+    F & 6~Mbps & 0--160~s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+O cenário~A representa uma queda abrupta e prolongada,
+testando a capacidade do controlador de reagir a um corte
+único e sustentado. O cenário~B aplica degraus sucessivos de
+severidade crescente, exigindo do controlador adaptações
+encadeadas em curto intervalo. O cenário~C aplica dois
+patamares mais longos, simulando uma transição entre regimes
+de banda. O cenário~D alterna entre quatro janelas curtas de
+constrição e períodos de recuperação, testando o
+comportamento do controlador em ciclos de degradação e
+restauração. Os cenários~E e~F representam constrições
+contínuas, severa e moderada respectivamente, em que o
+controlador deve estabilizar a operação dentro do envelope
+imposto pela rede.
+
+\subsection{Controladores Comparados}
+
+Três controladores foram avaliados, identificados como
+referência fixa, AIMD de base e AIMD CUBIC. O controlador de
+referência fixa corresponde ao comportamento original do
+Sunshine, em que a taxa de bits é negociada uma única vez ao
+início da sessão e mantida constante até o fim. O controlador
+AIMD de base aplica corte multiplicativo com fator $\beta = 0{,}7$
+ao detectar congestionamento e cresce em duas fases
+(``$\times \gamma$ depois $+\Delta$''), sem o mecanismo de
+\emph{fast convergence}; corresponde à versão do controlador
+adaptativo que antecedeu a contribuição apresentada neste
+trabalho. O controlador AIMD CUBIC corresponde à contribuição
+descrita no Capítulo~\ref{sec:contribuicao}, com os parâmetros
+sintetizados na Tabela~\ref{tab:params}.
+
+\subsection{Instrumentação e Métricas}
+
+A coleta de dados em \emph{runtime} é realizada pelo próprio
+Sunshine, por meio de extensão de instrumentação introduzida em
+contribuição prévia ao projeto. A cada amostra de RTT recebida
+da biblioteca ENet, um registro é exportado para um arquivo
+CSV contendo o instante de amostragem, o RTT, a variância do
+RTT, o tempo de envio do quadro mais recente, o tamanho do
+quadro codificado, a taxa de bits-alvo corrente, o estado do
+controlador e indicadores de eventos relevantes (envio de
+quadro IDR, requisição de IDR pelo cliente). A taxa de
+amostragem é a própria taxa de quadros do codificador,
+tipicamente próxima de \SI{60}{\hertz}.
+
+A partir do CSV de cada sessão são derivadas as métricas
+agregadas reportadas no Capítulo~\ref{sec:resultados}. As
+métricas de latência incluem o pico de RTT, os percentis 50,
+95 e 99 da distribuição, e a fração do tempo total em que o
+RTT excede o limiar de \SI{100}{\milli\second} estabelecido
+como referência para jogos de ação~\cite{baldovino2022}. As
+métricas de throughput incluem a taxa de bits média sustentada
+durante a janela de shaping e o uso do canal, definido como a
+razão entre essa média e a capacidade imposta pela emulação.
+As métricas de continuidade incluem a contagem de \emph{stalls},
+definidos como intervalos consecutivos superiores a
+\SI{100}{\milli\second} sem entrega de quadros ao cliente, o
+tempo total acumulado em \emph{stall}, e a contagem de quadros
+IDR emitidos durante a sessão. Esta última é utilizada como
+indicador indireto de recuperação após perdas que escaparam aos
+mecanismos de FEC.
+
+Adicionalmente, ao final de cada sessão o operador registrou
+três avaliações subjetivas em escala de 1 a 5, em que 1
+corresponde à melhor avaliação: \emph{latência percebida},
+\emph{qualidade visual} e \emph{estabilidade}. A avaliação foi
+conduzida por um único operador (o autor do trabalho), o que
+constitui uma limitação reconhecida na discussão dos
+resultados.
+
+\subsection{Uso de Inteligência Artificial como Ferramenta de Pesquisa}
+
+Ferramentas de inteligência artificial baseadas em modelos de
+linguagem de grande porte foram empregadas em dois pontos do
+trabalho. O primeiro foi o apoio à implementação em C++ do
+controlador e de sua integração ao Sunshine, incluindo o
+ajuste de testes em \emph{gtest} e a conformidade com as
+convenções de estilo do projeto \emph{upstream}. Todo o código
+produzido com esse apoio foi revisado, compilado e testado pelo
+pesquisador antes de qualquer submissão ao repositório
+\emph{upstream}, e nenhuma alteração foi incorporada sem
+verificação.
+
+O segundo foi a estruturação de uma base de conhecimento
+local, em formato Markdown compatível com o \emph{Obsidian},
+utilizada como apoio à navegação do material bibliográfico, da
+documentação interna do Sunshine, e do registro das iterações
+de \emph{design} do controlador. A base é composta por
+análises individuais (de \emph{papers} lidos, de subsistemas
+do Sunshine e de Linux, e de cada iteração de projeto), com
+referências cruzadas via \emph{wikilinks} que permitem
+visualização em grafo. A síntese inicial de cada arquivo foi
+auxiliada por IA a partir da leitura primária do material pelo
+pesquisador, com edições e validações subsequentes realizadas
+manualmente.
+
+O uso de IA neste trabalho restringiu-se ao apoio à
+implementação de código e à estruturação da base de
+conhecimento de pesquisa, ambos sob revisão e validação do
+pesquisador. As decisões de projeto, a análise dos resultados
+experimentais e as conclusões apresentadas são de autoria
+própria.
+
+\subsection{Protocolo de Execução}
+
+A campanha experimental consistiu em uma execução por par
+(controlador, cenário) para o controlador AIMD CUBIC,
+totalizando seis execuções novas. As colunas correspondentes
+ao controlador de referência fixa e ao AIMD de base foram
+reaproveitadas de campanha anterior, conduzida sobre o mesmo
+testbed e com a mesma configuração do servidor, em razão da
+baixa variância observada entre execuções repetidas naquela
+campanha. As implicações dessa escolha são discutidas no
+Capítulo~\ref{sec:resultados}.
+
+Cada execução seguiu o mesmo procedimento. O servidor foi
+iniciado com a configuração apropriada ao controlador em
+avaliação. O cliente conectou-se ao servidor e iniciou o jogo
+\emph{Celeste}, com o operador conduzindo o personagem por uma
+sequência de fases pré-determinada, de duração total de
+aproximadamente quatro minutos, suficiente para cobrir a janela
+de shaping mais períodos de aquecimento e encerramento. O \emph{shaping} foi acionado no instante zero
+da contagem do cenário, com a duração definida na
+Tabela~\ref{tab:scenarios}. Ao final da sessão, o operador
+registrou as três avaliações subjetivas descritas na seção
+anterior. O arquivo CSV resultante foi arquivado em
+\texttt{testbed/results/cubic/} com identificador associado ao
+cenário e ao instante de execução.

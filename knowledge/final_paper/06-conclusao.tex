@@ -1,0 +1,33 @@
+\section{Conclusão}\label{sec:conclusao}
+
+% ─── Beat 1: Retomada da contribuição. ──────────────────────────────
+% Implementamos e avaliamos um controlador adaptativo de taxa de bits
+% server-side para o Sunshine, fundamentado em primitivas peer-reviewed
+% do CUBIC. Demonstramos ganho expressivo no pico de RTT e em eventos
+% de stall sob constrição de rede, com troca explícita por leve aumento
+% de latência mediana.
+
+% ─── Beat 2: Lições. ────────────────────────────────────────────────
+\subsection{Lições Aprendidas}
+% - A cadência de decisão (1 Hz) interage de forma não-trivial com a
+%   curva do CUBIC, originalmente desenhada para amostragem por-ACK.
+% - O regime de cauda é o que importa para jogabilidade — métricas
+%   medianas são enganosas em jogos em nuvem.
+% - O sinal RTT server-side, isoladamente, é suficiente para um
+%   controlador útil; cooperação do cliente não é pré-requisito.
+
+% ─── Beat 3: Trabalhos futuros. ─────────────────────────────────────
+\subsection{Trabalhos Futuros}
+% - Caminho sub-segundo via \texttt{frame\_send\_ms} (Idea 3 do
+%   roadmap): detectar congestão em < 1 s.
+% - Memória de "safe target" por sessão (Idea 4): convergir mais rápido
+%   em reconexões.
+% - Gatilho preditivo (Idea 2): antecipar via gradiente, como no
+%   \cite{gcc}.
+% - Avaliação multi-usuário com $n$ avaliadores subjetivos.
+% - Sweep de $\beta$ e $K$ — fica como espaço de exploração.
+
+% ─── Beat 4: Impacto e código aberto. ───────────────────────────────
+\subsection{Impacto}
+% Pull Request submetido ao repositório upstream do Sunshine. Código
+% disponível sob a mesma licença GPL-3.0 do projeto.

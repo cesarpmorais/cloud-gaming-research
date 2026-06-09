@@ -1,0 +1,70 @@
+\section{Resultados}\label{sec:resultados}
+
+% ─── Beat 1: Visão consolidada. ─────────────────────────────────────
+\subsection{Visão Geral}
+% Tabela 3-vias × 6 cenários × métricas principais.
+% Headline: AIMD CUBIC ganha em pico de RTT em 5/6 cenários
+% (maior ganho: -43\% em A) e em tempo total de stall em 5/6
+% (maior ganho: 11 s → 4,3 s em E), mas eleva p50/p95 em todos
+% e perde ratings subjetivos em 3/6.
+
+% ─── Beat 2: Por cenário. ───────────────────────────────────────────
+\subsection{Análise por Cenário}
+
+\subsubsection{Cenário A — Queda Abrupta}
+% Caso onde CUBIC mais brilha: -43\% no pico.
+
+\subsubsection{Cenário B — Degradação em Degraus}
+
+\subsubsection{Cenário C — Dois Patamares}
+
+\subsubsection{Cenário D — Janelas Curtas}
+
+\subsubsection{Cenário E — Constrição Pesada Longa}
+% Headline secundário: stalls 11 s → 4,3 s.
+
+\subsubsection{Cenário F — Regressão Discutida}
+% Único cenário em que CUBIC regride. Discutir por quê.
+
+% ─── Beat 3: Trade-off central. ─────────────────────────────────────
+\subsection{O Trade-off: Cauda vs. Regime Estacionário}
+% CUBIC otimiza cauda da distribuição (pico, p99, stalls);
+% AIMD de base otimiza regime estacionário (p50, p95).
+% Esta é uma escolha de prioridade, não dominância.
+% Conexão com \cite{alos2019} §6 (design philosophy).
+
+% ─── Beat 3.5: Análise de sensibilidade ao design (5b/5c). ─────────
+\subsection{Análise de Sensibilidade ao Design da Curva}\label{sec:sensibilidade}
+% Após a comparação principal, avaliamos duas variantes de design da
+% curva cúbica para entender o porquê da forma final adotada:
+%
+% - Variante 5b: âncora temporal em \texttt{rtt\_clear\_since} em vez
+%   de \texttt{last\_decrease\_at}.
+% - Variante 5c: acumulação monotônica de t entre crescimentos
+%   (CUBIC literal, §3.1 do paper original).
+%
+% Ambas regridem o pico de RTT em cenários constrangidos (A K=5 s,
+% E K=15 s). Diagnóstico estrutural: o CUBIC foi originalmente
+% formulado para amostragem por-ACK, regime em que pequenos deltas
+% acumulam ao longo de muitas iterações; em cadência de 1 Hz, a curva
+% aplica o delta cheio em cada tick, resultando em overshoot
+% sistemático.
+%
+% Achado de pesquisa a destacar: o CUBIC literal pressupõe densidade
+% de amostragem por-ACK; em ambientes de cadência reduzida (1 Hz no
+% nosso caso), a variante simplificada (âncora em last_decrease_at,
+% reset de clear_since a cada crescimento) é não apenas suficiente,
+% mas superior.
+%
+% Fontes: [[results-idea-5b]], [[results-idea-5c]].
+
+% ─── Beat 4: Ratings subjetivos. ────────────────────────────────────
+\subsection{Avaliação Subjetiva}
+% Tabela de ratings 1-5 por cenário e controlador.
+% n=1 avaliador. Limitação reconhecida.
+
+% ─── Beat 5: Caveats. ───────────────────────────────────────────────
+\subsection{Limitações dos Resultados}
+% n=1 execução por célula CUBIC; reaproveitamento das colunas
+% base; conteúdo do jogo afeta dificuldade efetiva (encoder produz
+% menos quando cena é menos demandante); um único avaliador subjetivo.

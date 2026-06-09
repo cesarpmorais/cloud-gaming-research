@@ -1,0 +1,174 @@
+
+\section{Referencial Teórico}\label{sec:referencial}
+
+Esta seção apresenta uma revisão sistemática da literatura
+relevante para controle adaptativo de taxa de bits em jogos em
+nuvem. A revisão foi estruturada em seis eixos temáticos
+complementares, conduzidos do mais geral ao mais específico:
+caracterização do problema de rede em jogos em nuvem, codecs de
+vídeo e reconfiguração em tempo de execução, controle de
+congestionamento na herança do TCP, controle adaptativo para
+mídia em tempo real, o trabalho mais próximo da contribuição
+proposta, e o servidor \emph{Sunshine} como plataforma de
+contribuição.
+
+\subsection{Jogos em Nuvem como Problema de Rede}
+
+Jogos em nuvem (\emph{cloud gaming}) consistem em executar o
+jogo em um servidor remoto, capturar a saída de vídeo do jogo,
+codificá-la em tempo real e transmiti-la a um cliente leve, que
+decodifica e exibe os quadros enquanto envia comandos de entrada
+de volta ao servidor. A arquitetura delega ao
+servidor a carga computacional (GPU, codec), reduzindo o cliente
+a um decodificador de vídeo — viabilizando jogos de alto custo
+em hardware modesto.
+
+Esta separação, no entanto, impõe requisitos rigorosos ao canal de rede. A revisão sistemática conduzida por Baldovino~\cite{baldovino2022}, abrangendo 33 estudos publicados entre 2017 e 2022, consolida os limiares tradicionalmente adotados pela literatura para caracterizar as condições necessárias à operação adequada de sistemas de cloud gaming: latência de ida e volta inferior
+a \SI{100}{\milli\second} para jogos de ação, taxa de perda
+inferior a 1\%, e tempo de resposta total (\emph{response time})
+entre 100 e \SI{150}{\milli\second}. Acima desses limiares, a
+experiência do usuário degrada de forma perceptível e, em casos
+extremos, torna o jogo injogável.
+
+A importância desses limiares está associada a uma característica fundamental do próprio meio. Diferentemente do \emph{streaming} de vídeo sob demanda, em que \emph{buffers} de alguns segundos conseguem mascarar variações da rede de forma praticamente transparente ao usuário, aplicações de cloud gaming operam com \emph{buffers} reduzidos, geralmente limitados a um ou dois quadros, para manter a interatividade. Como consequência, atrasos, perdas de pacotes ou variações na latência (\emph{jitter}) são rapidamente refletidos na qualidade percebida, manifestando-se na forma de travamentos, \emph{tearing} ou perda de sincronização.
+
+Hong et al.~\cite{hong2015} avaliaram três jogos executados a 720p sobre o \emph{GamingAnywhere} e observaram que o MOS (\emph{Mean Opinion Score}) tende a saturar em torno de \SI{2}{\mega\bit\per\second}. Acima desse valor, aumentos na taxa de bits produzem ganhos perceptuais limitados; abaixo dele, a qualidade percebida se deteriora rapidamente. Esse comportamento reforça a importância de considerar métricas de cauda, como valores de pico e percentis elevados (p99), em vez de medidas centrais como a mediana, abordagem que será retomada no Capítulo~\ref{sec:metodologia}.
+
+Como o processo de codificação é executado no servidor, este possui controle direto sobre a principal variável reconfigurável do pipeline: a taxa de bits-alvo do codificador. O servidor constitui, portanto, o ponto mais natural para a implementação da política de adaptação, dispensando mecanismos adicionais de cooperação por parte do cliente ou da infraestrutura de rede. Essa observação motiva o recorte adotado neste trabalho, detalhado no Capítulo~\ref{sec:contribuicao}.
+
+
+\subsection{Codecs de Vídeo e Reconfiguração em Tempo de Execução}
+
+A compressão de vídeo em jogos em nuvem é dominada pelos padrões
+H.264, HEVC (H.265) e, mais recentemente, AV1, todos baseados em
+predição temporal entre quadros. Três tipos de quadros compõem
+um fluxo típico: quadros-I (\emph{intra-coded}), codificados de
+forma independente; quadros-P (\emph{predicted}), que dependem
+de quadros anteriores; e quadros-B (\emph{bidirectional}),
+ausentes em jogos em nuvem por exigirem buffer adiante. Dentro
+da categoria de quadros-I, os quadros IDR (\emph{Instantaneous
+Decoder Refresh}) zeram a referência do decodificador, isolando
+o erro de propagação após perdas — funcionando como mecanismo de
+recuperação de último recurso quando outras escadas de proteção
+(FEC, retransmissão seletiva) falham.
+
+Entretanto, o custo dos quadros IDR é alto: por carregarem todo o
+conteúdo do quadro de forma independente, IDRs são
+substancialmente maiores que quadros-P, gerando picos abruptos
+no tráfego de saída. Quando o canal já se encontra próximo da
+saturação, a inserção de um IDR pode provocar enfileiramento no
+gargalo, elevando o RTT (\emph{round-trip time}) e desencadeando
+uma cascata: o cliente, ao não receber o IDR a tempo, solicita
+outro, perpetuando o ciclo. Reduzir a frequência de IDRs é,
+portanto, um objetivo indireto, mas relevante, do controle
+adaptativo de taxa de bits.
+
+A reconfiguração dinâmica da taxa de bits do codificador é
+suportada pelos principais \emph{encoders} de hardware modernos. O trabalho de Hong et al.~\cite{hong2015}
+foi pioneiro em estender o servidor open-source
+\emph{GamingAnywhere} (GA) — antecessor direto do Sunshine — com
+suporte a reconfiguração de codec em tempo de execução, antes
+indisponível na plataforma. O presente trabalho herda
+diretamente esta linha: opera sobre uma plataforma open-source
+sucessora do GA e contribui exatamente com a política de decisão
+que aciona essa reconfiguração — não com a reconfiguração em si,
+que o Sunshine já suporta.
+
+\subsection{Controle de Congestionamento: do TCP ao Streaming}
+
+O controle de congestionamento na Internet é historicamente baseado no TCP. A família clássica de algoritmos TCP --- incluindo Reno, NewReno e SACK --- segue a política AIMD (\emph{Additive Increase, Multiplicative Decrease}), em que a janela de congestionamento cresce de forma aditiva na ausência de perdas e é reduzida multiplicativamente quando uma perda é detectada. Embora estável e amplamente estudada, essa estratégia apresenta limitações em redes com alto produto banda-atraso. Em um enlace de \SI{10}{\giga\bit\per\second} e RTT de \SI{100}{\milli\second}, por exemplo, o TCP clássico levaria aproximadamente 1,4 horas para recuperar a taxa de transmissão após uma única perda, o que o torna inadequado para diversas aplicações práticas~\cite{cubic}.
+
+Para contornar essa limitação, Ha, Rhee e Xu propuseram o algoritmo CUBIC~\cite{cubic}, que substitui o crescimento linear da janela por uma função cúbica dependente do tempo transcorrido desde a última redução:
+\begin{equation}
+B(t) = C \cdot (t - K)^3 + W_{\max}
+\label{eq:cubic}
+\end{equation}
+
+onde $W_{\max}$ representa o tamanho da janela imediatamente antes da última perda, $K$ corresponde ao instante em que a curva retorna a esse valor, e $C$ é uma constante que determina a taxa de crescimento. Para $t < K$, a curva é côncava e promove uma recuperação rápida em direção ao valor anteriormente alcançado. Nas proximidades de $t = K$, o crescimento torna-se mais gradual, enquanto para $t > K$ a curva assume formato convexo e passa a explorar capacidades adicionais da rede. Dessa forma, o CUBIC combina recuperação rápida após perdas com uma expansão mais cuidadosa acima do último ponto de operação conhecido.
+
+CUBIC introduz adicionalmente o mecanismo de \emph{fast
+convergence} (Equação 3.7 do trabalho original), que reduz
+$W_{\max}$ quando uma nova redução é disparada antes da
+recuperação completa. O efeito é prático: em cenários de
+congestionamento sustentado, em que a capacidade real do
+caminho está abaixo do último $W_{\max}$ conhecido, o algoritmo
+deixa de mirar um teto obsoleto, convergindo para a capacidade
+efetiva.
+
+CUBIC é o algoritmo de controle de congestionamento \emph{default}
+no kernel Linux desde a versão 2.6.18 (2006) e também o
+mais implantado na Internet. Sua relevância para este trabalho é dupla. Em primeiro lugar,
+o CUBIC fornece uma estratégia de recuperação amplamente estudada
+na literatura, capaz de substituir a heurística de crescimento
+utilizada pelo controlador de referência previamente avaliado.
+Além disso, o mecanismo de \emph{fast convergence} contribui para
+evitar a persistência de valores máximos incompatíveis com a
+capacidade efetiva do caminho em situações de congestionamento
+prolongado. A adaptação desses mecanismos ao contexto de mídia em
+tempo real é apresentada no Capítulo~\ref{sec:contribuicao}.
+
+\subsection{Controle Adaptativo para Mídia em Tempo Real}
+
+O controle de congestionamento em fluxos de mídia em tempo real
+sobre UDP — em que retransmissão é inviável e o sinal de perda
+chega tardio — exige sinais distintos do TCP. Dois trabalhos
+estabelecem o estado da arte fora do contexto específico de
+jogos em nuvem.
+
+\subsubsection{GCC --- Google Congestion Control}
+
+O algoritmo GCC, descrito por Carlucci et al.~\cite{gcc}, é o controlador de congestionamento utilizado pelo WebRTC e incorporado em aplicações como Chromium e Google Hangouts. Diferentemente do TCP clássico, o GCC não utiliza a perda de pacotes como principal sinal de congestionamento. Em vez disso, baseia-se na variação do atraso unidirecional entre pacotes consecutivos para detectar o início da formação de filas, ajustando a taxa de envio por meio de uma política AIMD. Essa abordagem prioriza a manutenção de baixa latência em detrimento da máxima utilização da largura de banda, característica desejável em aplicações sensíveis a atraso, como videoconferência e cloud gaming.
+
+O GCC reforça algumas das premissas adotadas neste trabalho. Em primeiro lugar, indica que, em aplicações de mídia em tempo real, sinais baseados em atraso tendem a ser mais adequados do que sinais baseados em perda. Além disso, mostra que estratégias inspiradas em AIMD continuam sendo eficazes quando adaptadas às características da aplicação. Por fim, demonstra que o controle pode ser implementado inteiramente do lado do remetente, exigindo apenas os mecanismos de \emph{feedback} já disponíveis. No WebRTC, esse papel é desempenhado pelo RTCP; no Sunshine, utiliza-se o RTT mantido pela biblioteca ENet no canal de controle do protocolo Moonlight.
+
+A principal diferença em relação à abordagem proposta está na granularidade do controle. Enquanto o GCC opera em nível de pacote e recebe \emph{feedback} contínuo do receptor, o controlador desenvolvido neste trabalho atua em nível de quadro e utiliza amostras de RTT obtidas a cada ciclo de decisão. Essa escolha decorre das características do protocolo de streaming empregado e do custo associado a modificações no protocolo Moonlight.
+
+\subsubsection{ABRAGame}
+
+O algoritmo ABRAGame, proposto por Armendariz e
+Joskowicz~\cite{abragame}, representa o trabalho mais recente em
+controle adaptativo de taxa de bits especificamente voltado a
+jogos em nuvem. O sinal central é \emph{latência cumulativa em
+uma janela deslizante de \SI{500}{\milli\second}}, calculado no
+cliente a partir de medições de atraso unidirecional amostradas
+a cada \SI{20}{\milli\second}. A política prioriza
+explicitamente \emph{estabilidade sobre qualidade}: aceita
+reduções agressivas de resolução em troca de evitar travamentos
+e quadros congelados, alinhando-se à assimetria de QoE
+identificada por Hong et al.~\cite{hong2015}.
+
+ABRAGame reforça a importância de métricas baseadas em atraso em aplicações de cloud gaming e a prioridade atribuída à estabilidade percebida pelo usuário. A principal diferença em relação à abordagem proposta neste trabalho está no requisito de sincronização entre os relógios do cliente e do servidor. O cálculo do atraso unidirecional pressupõe que ambos estejam sincronizados, condição difícil de garantir em redes domésticas e indisponível no protocolo Moonlight sem modificações adicionais. Em contraste, nossa abordagem opera exclusivamente sobre RTT, métrica mantida pela biblioteca ENet no canal de controle e já exposta pelo Sunshine, dispensando qualquer cooperação adicional do cliente.
+
+\subsection{O Trabalho Mais Próximo: C\textsuperscript{3}G}
+
+Dentre os trabalhos relacionados, o mais próximo da abordagem proposta é o C\textsuperscript{3}G (\emph{Congestion Control for Cloud Gaming over UDP based on Round-Trip Video Latency}), de Alós et al.~\cite{alos2019}. O C\textsuperscript{3}G é um controlador de taxa de bits do lado servidor, baseado em latência e inspirado em conceitos do algoritmo BBR (\emph{Bottleneck Bandwidth and RTT}), tendo sido implementado sobre a plataforma de cloud gaming PlayGiga.
+
+Seu sinal principal, denominado \emph{Round-Trip Video Latency} (RTVL), corresponde a uma estimativa, calculada por quadro, do tempo transcorrido entre o início da codificação no servidor e a chegada da confirmação correspondente do cliente. A partir dessa métrica, o controlador combina uma fase reativa, responsável por reduzir a taxa de bits quando o RTVL excede determinados limiares, com uma fase proativa, em que informações de estados previamente observados orientam novas sondagens de taxa.
+
+Embora compartilhe com o C\textsuperscript{3}G a utilização de sinais de atraso para controle adaptativo no servidor, a abordagem proposta neste trabalho difere em alguns aspectos importantes. Enquanto o C\textsuperscript{3}G depende do envio de confirmações associadas a cada quadro de vídeo, exigindo modificações no protocolo de \emph{streaming}, nossa implementação utiliza apenas o RTT já mantido pela biblioteca ENet no canal de controle do Moonlight. Além disso, a proposta é incorporada ao Sunshine, um projeto open-source amplamente utilizado pela comunidade de cloud gaming self-hosted, em contraste com a plataforma proprietária PlayGiga utilizada pelos autores.
+
+Outra diferença está no mecanismo de recuperação após reduções de taxa. Em vez da heurística baseada em um dicionário de estados empregada pelo C\textsuperscript{3}G, adotamos a curva de crescimento do algoritmo CUBIC~\cite{cubic}, amplamente estudada na literatura de controle de congestionamento. Por fim, o compromisso entre utilização do canal e picos de atraso discutido por Alós et al. é mantido como referência para a avaliação experimental, permitindo comparar os resultados obtidos com aqueles reportados pelo estado da arte.
+
+\subsection{O Servidor Sunshine}
+
+O \emph{Sunshine} é um servidor open-source de \emph{streaming}
+de jogos compatível com o protocolo NVIDIA GameStream e cliente
+Moonlight, mantido sob a licença GPL-3.0 pela comunidade
+LizardByte. Surgiu como uma alternativa open-source mais recente ao GamingAnywhere — plataforma alvo do trabalho de Hong et al.~\cite{hong2015} —, oferecendo suporte oferecendo suporte multiplataforma e múltiplos mecanismos de captura e codificação de vídeo.
+Sua posição como alternativa \emph{self-hosted} a plataformas
+comerciais como GeForce NOW e Xbox Cloud Gaming torna-o um
+veículo de impacto direto para contribuições em jogos em nuvem.
+
+O pipeline interno do Sunshine encadeia captura de tela,
+codificação, encapsulamento e envio sobre UDP — vídeo com
+proteção Reed-Solomon (FEC) e canal de controle sobre ENet —,
+com a taxa de bits do codificador negociada uma única vez ao
+início da sessão por meio do protocolo RTSP. Após a negociação
+inicial, o servidor opera com taxa de bits fixa: não há, na
+linha base, qualquer mecanismo de reação a degradação observada
+do canal. Essa limitação motiva a proposta apresentada neste trabalho.
+
+O Capítulo~\ref{sec:contribuicao} descreve a política de controle
+proposta e sua integração na arquitetura do Sunshine; o
+Capítulo~\ref{sec:metodologia} detalha o protocolo experimental
+de avaliação.
