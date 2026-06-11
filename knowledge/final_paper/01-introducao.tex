@@ -1,45 +1,79 @@
 \section{Introdução}\label{sec:introducao}
 
-% ─── Beat 1: O problema. ─────────────────────────────────────────────
-% Jogos em nuvem: cliente fino, servidor caro, rede no meio.
-% Requisitos duros: RTT < 100 ms, perda < 1\%.
-% A rede doméstica não os respeita o tempo todo.
+Jogos em nuvem (\emph{cloud gaming}) adotam uma arquitetura
+cliente-fino em que o servidor executa o jogo e o cliente
+recebe apenas o vídeo codificado, viabilizando acesso a
+títulos de alto custo computacional em dispositivos modestos.
+Essa separação transfere para a rede o ônus de sustentar uma
+experiência tradicionalmente local ao usuário, impondo
+requisitos rigorosos: latência de ida e volta inferior a
+\SI{100}{\milli\second} para jogos de ação e taxa de perda
+abaixo de 1\%~\cite{baldovino2022}. A rede doméstica raramente
+respeita esses limiares de forma consistente, e qualquer
+variação súbita de capacidade manifesta-se imediatamente como
+travamento visual ou perda de sincronia. As plataformas
+comerciais dominantes contornam parcialmente o problema com
+investimento maciço em infraestrutura, ao custo de um modelo
+operacional baseado em assinatura, catálogo restrito ao
+licenciamento da operadora, hardware proprietário e ausência
+de controle do usuário sobre a sessão.
 
-% ─── Beat 2: Por que controle adaptativo de taxa de bits importa. ────
-% Sem ABR: estouro de buffer (bufferbloat), travamentos, recuperação
-% via I-frame (IDR) — punição visual severa.
-% O servidor é o lugar natural para o controle: ele controla o codec.
+O \emph{Sunshine} é um servidor open-source de \emph{streaming}
+de jogos compatível com o protocolo NVIDIA GameStream e
+cliente Moonlight, mantido sob a licença GPL-3.0, e
+constitui-se como a alternativa \emph{self-hosted} mais
+adotada. Atualmente, opera com taxa de bits negociada uma
+única vez ao início da sessão, sem qualquer mecanismo de
+reação a degradação observada do canal. Diante de constrições
+de banda, o comportamento resultante combina estouro de
+\emph{buffer} no gargalo, inflação contínua do RTT e cascatas
+sucessivas de quadros IDR. Os trabalhos correlatos mais
+próximos~\cite{alos2019,abragame,gcc} resolvem o problema do
+controle adaptativo de taxa de bits em contextos próprios,
+mas todos pressupõem extensão do protocolo de \emph{streaming},
+cooperação ativa do cliente ou sincronização de relógio,
+requisitos incompatíveis com o protocolo Moonlight e sua base
+instalada.
 
-% ─── Beat 3: O Sunshine e o problema das plataformas comerciais. ────
-% Plataformas comerciais (GeForce NOW, Xbox Cloud Gaming, PlayStation
-% Plus) resolvem o problema às custas de lock-in: assinatura mensal,
-% catálogo restrito, hardware proprietário no data center, sem controle
-% do usuário sobre qualidade/latência. Alternativa open-source: o
-% \emph{Sunshine}, servidor de streaming compatível com o protocolo
-% NVIDIA GameStream (cliente Moonlight), permite que o usuário rode o
-% próprio jogo na própria máquina e estreame para qualquer dispositivo
-% leve em sua rede ou via internet. Hoje, opera com taxa de bits fixa
-% negociada no início da sessão — sem reação a degradação de rede em
-% curso, deixando a experiência refém da estabilidade do link.
+Neste artigo, propomos e avaliamos o \emph{AIMD CUBIC}, um
+controlador adaptativo de taxa de bits para o servidor
+Sunshine, baseado exclusivamente em sinais já disponíveis no
+servidor e sem qualquer modificação no cliente. O controlador
+estende um esquema AIMD clássico com duas primitivas do
+algoritmo CUBIC~\cite{cubic}: a curva cúbica de recuperação
+após reduções de taxa e o mecanismo de \emph{fast convergence}
+para atualização do teto de referência. As contribuições são
+três. \emph{Primeiro}, o projeto e a implementação do
+controlador, integrado à árvore de código do Sunshine.
+\emph{Segundo}, uma campanha experimental sobre seis cenários
+de degradação de rede e três controladores, em que o AIMD
+CUBIC reduz o pico de RTT em cinco dos seis cenários, com a
+maior queda alcançando 43\%, e o tempo total acumulado em
+\emph{stall} em cinco dos seis cenários, com queda de até
+61\%, ao custo de uma elevação sistemática do RTT mediano e
+sem dominar a referência adaptativa em todas as dimensões.
+Esse resultado caracteriza um trade-off entre cauda e regime
+estacionário da distribuição de latência que se mostra
+fundamental para o posicionamento de controladores
+adaptativos em jogos em nuvem. \emph{Terceiro}, um achado
+estrutural sobre a adaptação do CUBIC a regimes de cadência
+reduzida: a forma literal da curva, projetada para amostragem
+por~ACK, mostra-se empiricamente inferior à variante
+simplificada aqui adotada quando aplicada a 1~Hz, indicando
+que algoritmos de controle de congestionamento entre regimes
+de cadência distintos exigem ajuste estrutural, e não apenas
+reparametrização.
 
-% ─── Beat 4: A contribuição. ────────────────────────────────────────
-% Implementamos um controlador AIMD com primitivas do CUBIC
-% (Ha, Rhee, Xu, 2008) — curva cúbica de recuperação e convergência
-% rápida — apenas com sinais observáveis no servidor (RTT, sem
-% cooperação do cliente). Avaliamos contra (a) base sem ABR e
-% (b) AIMD de duas fases sob seis cenários de degradação reproduzíveis.
+A diferenciação em relação ao estado da arte concentra-se na
+ausência de requisitos sobre o cliente e o protocolo,
+discutida em detalhe no Capítulo~\ref{sec:referencial}.
 
-% ─── Beat 5: Resultado principal. ───────────────────────────────────
-% Redução de até 43\% no pico de RTT e até 60\% no tempo total de
-% travamento, ao custo de um leve aumento na latência mediana — uma
-% troca alinhada às prioridades de jogabilidade discutidas em
-% \cite{alos2019,abragame}.
-
-% ─── Beat 6: Estrutura do trabalho. ─────────────────────────────────
-\subsection{Estrutura do Trabalho}
-% Cap. \ref{sec:referencial} apresenta o referencial teórico e os
-% trabalhos correlatos. Cap. \ref{sec:contribuicao} descreve o
-% controlador proposto. Cap. \ref{sec:metodologia} detalha o testbed
-% e o protocolo experimental. Cap. \ref{sec:resultados} apresenta os
-% resultados. Cap. \ref{sec:conclusao} conclui e aponta trabalhos
-% futuros.
+O Capítulo~\ref{sec:referencial} apresenta o referencial
+teórico e o posicionamento contra os trabalhos correlatos. O
+Capítulo~\ref{sec:contribuicao} descreve o controlador
+proposto. O Capítulo~\ref{sec:metodologia} detalha o
+\emph{testbed} físico, os cenários de degradação e o
+protocolo experimental. O Capítulo~\ref{sec:resultados}
+apresenta os resultados, incluindo a análise de sensibilidade
+ao design da curva. O Capítulo~\ref{sec:conclusao} retoma os
+achados centrais e discute trabalhos futuros.

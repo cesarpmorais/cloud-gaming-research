@@ -37,18 +37,24 @@ O \emph{AIMD CUBIC} é uma política de controle baseada em \emph{Additive Incre
 As amostras de RTT são coletadas continuamente ao longo da transmissão e utilizadas para atualizar os contadores de duração contínua acima e abaixo dos limiares configurados. As decisões de controle, entretanto, são tomadas em uma cadência fixa de 1~Hz, desacoplada da taxa de quadros do codificador. Em cada ciclo de decisão, o controlador determina se a taxa de bits-alvo deve ser mantida, reduzida ou aumentada. Reduções são disparadas quando o RTT permanece acima do limiar por um intervalo correspondente à histerese configurada, enquanto aumentos ocorrem após períodos sustentados abaixo do limiar e seguem a curva cúbica do CUBIC para definir a magnitude do incremento.
 
 
-% TODO - [SUGESTÃO DE FIGURA] máquina de estados do controlador
 \begin{figure}[!t]
   \centering
-  \includegraphics[width=\columnwidth]{figs/placeholder-state-machine}
+  \includegraphics[width=\columnwidth]{images/state_machine.png}
   \caption{Máquina de estados do controlador AIMD CUBIC. A
-  cada amostra de RTT, o controlador transita entre os estados
-  \emph{estável} e \emph{congestionado} conforme o RTT
-  ultrapassa ou retorna ao limiar; ao acumular tempo
-  suficiente em um desses estados, o ciclo de decisão de 1~Hz
-  promove a transição para \emph{decrescendo}, \emph{recuperando}
-  ou \emph{sondando}, atuando sobre a taxa de bits-alvo do
-  codificador.}
+  cada amostra de RTT (setas cinzas), o controlador transita
+  entre os estados \emph{estável} e \emph{congestionado}
+  conforme o RTT ultrapassa o limiar $\tau_{\rm cong}$ ou
+  retorna abaixo de $\tau_{\rm cong} - m$, onde $m$ é a margem
+  de histerese. A cada ciclo de decisão a 1~Hz (setas azuis),
+  e desde que o \emph{streak} de duração mínima associado
+  ($h_{\rm down}$ para decrementos, $h_{\rm up}$ para
+  incrementos) tenha sido acumulado, o controlador atua sobre
+  a taxa de bits-alvo do codificador: \emph{decrescendo} a
+  partir de \emph{congestionado}; \emph{recuperando} ou
+  \emph{sondando} a partir de \emph{estável}, conforme a
+  amostra $B(t)$ da curva cúbica de recuperação esteja abaixo
+  ou acima do teto $L$. Os rótulos da fila inferior persistem
+  até o próximo ciclo de decisão.}
   \label{fig:state-machine}
 \end{figure}
 

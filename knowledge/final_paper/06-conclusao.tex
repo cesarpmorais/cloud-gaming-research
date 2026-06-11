@@ -1,33 +1,113 @@
 \section{Conclusão}\label{sec:conclusao}
 
-% ─── Beat 1: Retomada da contribuição. ──────────────────────────────
-% Implementamos e avaliamos um controlador adaptativo de taxa de bits
-% server-side para o Sunshine, fundamentado em primitivas peer-reviewed
-% do CUBIC. Demonstramos ganho expressivo no pico de RTT e em eventos
-% de stall sob constrição de rede, com troca explícita por leve aumento
-% de latência mediana.
+Este trabalho propôs e avaliou o \emph{AIMD CUBIC}, um
+controlador adaptativo de taxa de bits para o servidor de
+\emph{streaming} de jogos em nuvem Sunshine. O controlador
+estende um esquema AIMD com duas primitivas do algoritmo
+CUBIC~\cite{cubic}, a curva cúbica de recuperação após
+reduções e o mecanismo de \emph{fast convergence}, e opera
+exclusivamente a partir do RTT mantido pela biblioteca ENet
+no canal de controle, sem qualquer cooperação adicional do
+cliente. Avaliado contra um controlador de referência fixa e
+uma variante AIMD de base ao longo de seis cenários de
+degradação de rede, o controlador proposto reduz o pico de
+RTT em cinco dos seis cenários, com a maior queda alcançando
+43\% no cenário~A, e o tempo total acumulado em \emph{stall}
+em cinco dos seis cenários, com queda de 61\% no cenário~E.
+Esses ganhos são acompanhados de uma elevação sistemática do
+RTT mediano, de 4--5~ms no AIMD de base para 12--23~ms no
+AIMD CUBIC, configurando um trade-off explícito entre
+desempenho na cauda da distribuição de latência e desempenho
+no regime estacionário. Os dois controladores representam,
+portanto, escolhas de prioridade complementares, não soluções
+mutuamente dominantes.
 
-% ─── Beat 2: Lições. ────────────────────────────────────────────────
-\subsection{Lições Aprendidas}
-% - A cadência de decisão (1 Hz) interage de forma não-trivial com a
-%   curva do CUBIC, originalmente desenhada para amostragem por-ACK.
-% - O regime de cauda é o que importa para jogabilidade — métricas
-%   medianas são enganosas em jogos em nuvem.
-% - O sinal RTT server-side, isoladamente, é suficiente para um
-%   controlador útil; cooperação do cliente não é pré-requisito.
+\subsection{Achados que Transcendem o Sunshine}
 
-% ─── Beat 3: Trabalhos futuros. ─────────────────────────────────────
+A análise de sensibilidade ao design da curva (§\ref{sec:sensibilidade})
+isolou um achado de alcance maior que a contribuição
+imediata. Variantes mais fiéis à formulação original do CUBIC,
+incluindo a interpretação literal do parágrafo §3.1 do
+trabalho original, mostraram-se sistematicamente inferiores à
+forma simplificada adotada neste trabalho. O diagnóstico é
+estrutural: a curva cúbica do CUBIC foi formulada para
+amostragem por~ACK, regime em que pequenos deltas se acumulam
+ao longo de muitas iterações por segundo. Em controladores
+amostrados a cadências reduzidas, como o aqui proposto em
+1~Hz, a curva passa a aplicar o delta integral entre instantes
+de decisão, e a fidelidade ao paper original deixa de ser
+empiricamente desejável. A transposição de algoritmos de
+controle de congestionamento entre regimes de cadência exige,
+portanto, ajuste estrutural, não apenas reparametrização.
+
+Dois outros achados merecem destaque. O primeiro é que o RTT
+mantido server-side pela biblioteca ENet é, isoladamente,
+sinal suficiente para um controlador útil em jogos em nuvem,
+sem que sejam necessárias extensões de protocolo nem
+sincronização de relógio entre cliente e servidor. O segundo é
+que métricas de cauda (pico, percentil~99, eventos de
+\emph{stall}) e métricas centrais (mediana, percentis
+intermediários) devem ser reportadas conjuntamente para
+caracterização correta de controladores adaptativos: nenhuma
+das duas isoladamente é suficiente para distinguir prioridades
+de projeto, e o desempenho subjetivo correlaciona de forma
+não-trivial com ambas.
+
 \subsection{Trabalhos Futuros}
-% - Caminho sub-segundo via \texttt{frame\_send\_ms} (Idea 3 do
-%   roadmap): detectar congestão em < 1 s.
-% - Memória de "safe target" por sessão (Idea 4): convergir mais rápido
-%   em reconexões.
-% - Gatilho preditivo (Idea 2): antecipar via gradiente, como no
-%   \cite{gcc}.
-% - Avaliação multi-usuário com $n$ avaliadores subjetivos.
-% - Sweep de $\beta$ e $K$ — fica como espaço de exploração.
 
-% ─── Beat 4: Impacto e código aberto. ───────────────────────────────
+Cinco direções concretas emergem como continuação natural
+deste trabalho. A primeira é a introdução de uma memória de
+capacidade efetiva entre sessões, motivada pela regressão
+observada no cenário~F. Naquele cenário, a curva inicial de
+recuperação fica apontada para o teto negociado de sessão,
+inalcançável dada a constrição ativa desde $t=0$. Uma
+estimativa de capacidade carregada da sessão anterior
+permitiria que o controlador iniciasse com um teto
+\texttt{last\_known\_good} mais próximo da capacidade real do
+caminho, evitando a primeira cascata desperdiçada.
+
+A segunda direção é a adoção de um sinal de detecção
+sub-segundo, possivelmente a partir do tempo de envio do
+quadro mais recente (\texttt{frame\_send\_ms}, já coletado na
+instrumentação atual). A latência de reação do controlador
+proposto é da ordem da histerese de decremento, e um sinal
+adicional que se manifeste antes da inflação do RTT pode
+encurtar o tempo entre o início do congestionamento e o corte
+de taxa.
+
+A terceira direção é a introdução de um gatilho preditivo
+baseado em gradiente, na linha do controlador GCC para
+WebRTC~\cite{gcc}, capaz de antecipar a transição da fase de
+não-congestionamento para a fase de enfileiramento antes que
+o RTT cruze o limiar.
+
+A quarta direção é a condução de uma avaliação subjetiva
+\emph{crowdsourced}, segundo o protocolo de Hong et
+al.~\cite{hong2015}, em substituição às avaliações de
+operador único conduzidas neste trabalho. Esse formato
+permite quantificação estatística de Mean Opinion Score sob
+diferentes perfis de jogador, tipos de jogo, e condições de
+rede.
+
+A quinta direção é a comparação direta do AIMD CUBIC contra o
+GCC~\cite{gcc} e o ABRAGame~\cite{abragame} em um mesmo
+testbed, com a mesma instrumentação. Embora os trabalhos
+correlatos tenham reportado seu desempenho em ambientes
+próprios, a comparação cruzada em ambiente comum é a única
+forma robusta de posicionar o presente trabalho contra o
+estado da arte em métricas absolutas.
+
 \subsection{Impacto}
-% Pull Request submetido ao repositório upstream do Sunshine. Código
-% disponível sob a mesma licença GPL-3.0 do projeto.
+
+O controlador proposto, juntamente com a instrumentação de
+coleta de métricas que o sustenta, será submetido como
+contribuição ao repositório \emph{upstream} do Sunshine sob a
+licença GPL-3.0 do projeto. O testbed experimental, os
+\emph{scripts} de geração de cenários, os dados de cada
+sessão e os \emph{notebooks} de análise estão disponíveis para
+reprodução. As restrições metodológicas adotadas, como a
+execução única por cenário, a padronização da carga de
+trabalho em um único título e a avaliação subjetiva por um
+único operador, são documentadas ao longo do trabalho e
+abrem o caminho natural para as direções de trabalho futuro
+listadas acima.

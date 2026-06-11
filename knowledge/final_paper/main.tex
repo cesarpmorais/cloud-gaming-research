@@ -50,9 +50,32 @@ cesarcreeper@gmail.com}}
 \maketitle
 
 \begin{abstract}
-% TODO: 150–200 palavras. Problema, abordagem, resultado principal (queda
-% de até 43\% no pico de RTT vs. AIMD de base), contribuição (código
-% aberto incorporado ao Sunshine).
+Jogos em nuvem impõem requisitos rigorosos de latência e de
+perda de pacotes que a rede doméstica raramente respeita de
+forma consistente, comprometendo a experiência do usuário
+sob variações súbitas de capacidade. Este artigo investiga a
+aplicação de um controlador adaptativo de taxa de bits ao
+servidor open-source \emph{Sunshine}, baseado em um esquema
+\emph{Additive Increase, Multiplicative Decrease} (AIMD)
+estendido com duas primitivas do algoritmo CUBIC: a curva
+cúbica de recuperação após reduções de taxa e o mecanismo de
+\emph{fast convergence}. O controlador proposto opera
+exclusivamente a partir do RTT mantido pela biblioteca ENet
+no canal de controle, sem qualquer modificação no protocolo
+Moonlight ou cooperação adicional do cliente. Foi avaliado
+em uma campanha experimental envolvendo seis cenários de
+degradação de rede emulada e dois controladores de
+referência. Os resultados mostraram que a abordagem proposta
+reduz o pico de RTT em cinco dos seis cenários, com a maior
+queda atingindo 43\%, e o tempo total acumulado em
+\emph{stall} em cinco dos seis cenários, com queda de até
+61\%, ao custo de uma elevação sistemática do RTT mediano.
+Esses achados caracterizam um trade-off entre desempenho na
+cauda da distribuição de latência e desempenho no regime
+estacionário, e indicam que algoritmos de controle de
+congestionamento projetados para amostragem densa exigem
+ajuste estrutural, e não apenas reparametrização, ao serem
+transpostos para regimes de cadência reduzida.
 \end{abstract}
 
 \begin{IEEEkeywords}
